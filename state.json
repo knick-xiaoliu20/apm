@@ -1,36 +1,40 @@
 {
-  "last_updated": "2026-05-02T03:35:56Z",
-  "last_run_tasks": ["task3", "task7"],
+  "last_updated": "2026-05-03T03:37:00Z",
+  "last_run_tasks": ["task3", "task5", "task7"],
   "validated_commands": {
     "test": ".venv/bin/pytest tests/unit/ -q --ignore=tests/unit/test_audit_report.py --ignore=tests/unit/test_deps_update_command.py --ignore=tests/unit/marketplace/ --ignore=tests/unit/test_plugin_exporter_schema.py",
-    "test_view": ".venv/bin/pytest tests/unit/test_view_command.py -q",
     "format": ".venv/bin/ruff check src/ tests/ --fix && .venv/bin/ruff format src/ tests/",
     "lint_check": ".venv/bin/ruff check src/ tests/ && .venv/bin/ruff format --check src/ tests/",
-    "install_dev": "python3 -m uv sync --extra dev --no-build-isolation",
-    "notes": "uv not on PATH; use python3 -m uv or .venv/bin/ directly. rpds-py build fails with python3 -m uv run ruff (PyPy3.10 compat issue). Use .venv/bin/ruff instead. Excludes: test_audit_report.py (SyntaxError), test_deps_update_command.py (AttributeError), marketplace/ and test_plugin_exporter_schema.py (rpds ModuleNotFoundError). Baseline: ~5972 passed, 106 failed (pre-existing)."
+    "install_dev": "python3.12 -m uv sync --extra dev",
+    "notes": "Use python3.12 -m uv (PyPy3.10 uv module not available). No --no-build-isolation needed with Python 3.12. rpds-py builds fine. Baseline: ~6388 passed, 11 pre-existing failures (ANSI-strip policy status + llm runtime unavailable). Use .venv/bin/ruff not uv run ruff."
   },
   "coverage_baseline": {
-    "total": "~66%+ view.py",
-    "run_date": "2026-05-02",
-    "test_count_view": 41,
-    "notes": "view command: 34->41 tests (+7 error/display paths). baseline 5972 passing (106 pre-existing fails)."
+    "total": "6388 passing tests",
+    "run_date": "2026-05-03",
+    "notes": "test_targets_phase.py: 16 tests (was 13, added 3 for explicit target dir creation)."
   },
-  "monthly_activity_issue_note": "Issue #1087 was closed by maintainer (danielmeppiel) on 2026-05-01 with 'not_planned'. Create new monthly issue each run.",
+  "monthly_activity_issue": {"number": 1101, "month": "2026-05"},
   "ansi_note": "Rich outputs ANSI codes (italic, bold) even with NO_COLOR=1. Use regex r'\\x1b\\[[0-9;]*[A-Za-z]' to strip before text assertions.",
   "lockfile_format_note": "Lockfile is apm.lock.yaml (LOCKFILE_NAME constant).",
   "testing_backlog": [
     {"id": "install-command", "file": "src/apm_cli/commands/install.py", "coverage": "43%", "priority": "high", "notes": "Large complex file ~2804 lines. Core install logic. High risk. Deferred."},
     {"id": "compile-cli-full", "file": "src/apm_cli/commands/compile/cli.py", "coverage": "38%", "priority": "medium", "notes": "Main command logic still sparse."},
     {"id": "deps-cli", "file": "src/apm_cli/commands/deps/cli.py", "coverage": "71%", "priority": "medium", "notes": "update() orchestration complex."},
-    {"id": "view-command", "file": "src/apm_cli/commands/view.py", "coverage": "66%+", "priority": "low", "notes": "34->41 tests in PR #TBD (test-assist/view-error-handling-tests). Error paths now covered."}
+    {"id": "logic-replay-768", "priority": "done", "notes": "Refactored TestExplicitTargetDirCreation; PR submitted."}
   ],
-  "backlog_cursor": "deps-cli",
+  "backlog_cursor": "compile-cli-full",
   "completed_work": [
+    {
+      "run": "2026-05-03T03:37:00Z",
+      "tasks": ["task3", "task5", "task7"],
+      "pr_branch": "test-assist/fix-logic-replay-tests-768",
+      "description": "Task3: Fix logic-replay anti-pattern in TestExplicitTargetDirCreation (#768). 3 new phase-level tests in test_targets_phase.py. Task5: Commented on #768. Task7: Updated monthly issue #1101."
+    },
     {
       "run": "2026-05-02T03:35:56Z",
       "tasks": ["task3", "task7"],
       "pr_branch": "test-assist/view-error-handling-tests",
-      "description": "Task3: +7 tests for view command error paths (marketplace errors, display variations). Task7: new 2026-05 monthly issue created (prev #1087 closed by maintainer)."
+      "description": "Task3: +7 tests for view command error paths. Task7: new 2026-05 monthly issue created."
     },
     {
       "run": "2026-05-01T03:36:59Z",
