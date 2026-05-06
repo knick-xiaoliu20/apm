@@ -806,7 +806,8 @@ The `mcp_servers` field records the MCP dependency references (e.g. `io.github.g
 
 1. **First install**: APM resolves dependencies, downloads packages, and writes `apm.lock.yaml`
 2. **Subsequent installs**: APM reads `apm.lock.yaml` and uses locked commits for exact reproducibility. If the local checkout already matches the locked commit SHA, the download is skipped entirely.
-3. **Updating**: Use `--update` to re-resolve dependencies and generate a fresh lockfile. This re-resolves all dependencies, including transitive ones, so stale locked SHAs are never reused.
+3. **Mutable branch refs**: When a dependency uses `ref: <branch>` (e.g. `ref: main`), `apm install` always resolves the current remote HEAD for that branch and re-downloads if it has advanced past the lockfile-recorded SHA. The lockfile is updated to reflect the new commit. This means plain `apm install` keeps branch-pinned deps up to date without `--update`.
+4. **Updating**: Use `--update` to re-resolve dependencies and generate a fresh lockfile. This re-resolves all dependencies, including transitive ones, so stale locked SHAs are never reused.
 
 ### Version Control
 
