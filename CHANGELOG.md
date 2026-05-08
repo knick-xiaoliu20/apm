@@ -7,9 +7,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Virtual subdirectory and raw-file packages now resolve from self-hosted Git services (Gitea, Gogs) via raw URL with API v1/v3 fallback. (#587)
+- `shared/apm.md` gh-aw shared workflow exposes a `target:` import input (default `all`) so consumer workflows can ship slim, single-harness bundles instead of always packing every layout. (#1184)
+
 ### Fixed
 
-- **Parallel subdir install race.** `apm install` no longer intermittently fails with `RuntimeError: Subdirectory '<path>' not found in repository` when multiple dependencies resolve to different subdirectories of the same `repo@ref`. The shared clone cache now stores subdir-agnostic bare clones and each consumer materializes its own working tree (mirrors the WS3 `GitCache` pattern). (#1135, fixes #1126)
+- `shared/apm.md` no longer wraps the `target` input in a `|| 'all'` fallback. The defensive expression broke gh-aw's bare-expression substitution regex, causing consumer-supplied `target:` values to be silently dropped; the `import-schema` default already covers the omitted-input case. (#1185)
+- `apm install --target all` no longer enumerates the experimental `copilot-cowork` target, which was crashing project-scope installs with a "requires --global" error and made `gh aw` workflows that pin `target: all` unusable. (#1191)
+- Stabilized `test_install_over_defer_threshold_starts_live_once` on slow CI runners by joining the deferred-start timer thread instead of relying on a 100ms grace window. (#1191)
+- `triage-panel` scheduled sweep now paginates the candidate query oldest-first via the GitHub MCP `list_issues` tool instead of a single 200-issue page, so daily runs actually drain the untriaged backlog rather than processing one issue per cron tick. (#1193)
+- `triage-panel` scheduled sweep switches the candidate query from `list_issues`+prose-driven pagination to `search_issues` with `-label:status/triaged sort:created-asc`, so untriaged candidates are filtered server-side; the previous approach silently noop'd because the MCP gateway DIFC filter dropped non-collaborator issues mid-page and the agent inferred a false `hasNextPage:false`.
+- `apm install` now accepts the YAML list form under `target:` (e.g. `target: [copilot, claude]`); previously crashed with a garbled `Unknown target` error. (#1197)
+- `apm install --update` now falls back from a stale `ADO_APM_PAT` to an `az login` AAD bearer in the preflight auth probe, matching the behavior of `apm install` and every other ADO call site. Previously the preflight raised `AuthenticationError` on 401/403 even when `az login` would have succeeded. The bearer env also pops any pre-existing `GIT_TOKEN` so the JWT flows only via `GIT_CONFIG_VALUE_0`, and the per-host stale-PAT warning dedup is lock-guarded so parallel installs against the same ADO host emit one warning instead of one-per-thread. (#1212)
+- `Unknown target` error suggestions no longer advertise the `agent-skills` meta-target, which `apm targets` intentionally omits from its table. The canonical set still accepts `agent-skills` via `--target` and `apm.yml`, but the recovery path printed on errors now matches what the discovery command actually lists. (#1215)
+
+## [0.12.4] - 2026-05-07
+
+### Fixed
+
+- `apm install` now removes deployed files when a package is removed from `apm.yml`. Three sequential early-returns previously short-circuited the cleanup phase when the manifest was emptied; the orphan-cleanup logic itself was correct. (#1173)
+- `apm audit --ci` no longer reports false drift on self-package primitives that link to repo-root files (`[..](../../FILE.md)`). The replay's in-package asset rewriter now re-anchors `target_location` onto `package_root` when the candidate sits outside the scratch tree, mirroring real-install output. (#1182)
+
+## [0.12.3] - 2026-05-06
+
+### Security
+
+- `apm install --target copilot` no longer bakes secret values into `~/.copilot/mcp-config.json`: env-var placeholders (`${env:VAR}`, `${VAR}`, legacy `<VAR>`) are translated to Copilot's native `${VAR}` runtime form so secrets never touch disk. Rotate any previously-baked secrets and re-run install. (#1169, closes #1152)
+
+### Changed
+
+- Explicit, auditable target resolution: `apm install` / `apm compile` follow a strict `--target` > `apm.yml target:` > auto-detect chain, print a `[i] Targets: ... (source: ...)` provenance line, and exit 2 on empty repos instead of silently defaulting to `copilot`. Adds `apm targets` discovery command and `apm compile --all` (deprecates `--target all`). (#1165, closes #1154, #1122, #1130, #518, #888, #891, #650, #1056)
+- `apm init` opens an interactive numbered-toggle target checklist pre-seeded from filesystem signals so users land in Tier 2 (`apm.yml target:`) by default; adds `--target` for scripted use. (#1165)
+- `apm install` honours `policy.fetch_failure_default: block` for `no_git_remote` / `absent` / `empty`, matching the audit behaviour. (#1164)
+
+### Fixed
+
+- `apm audit --ci` no longer silently passes when no org policy is resolved: auto-discovery warns on stderr and honours `policy.fetch_failure_default: block` to fail closed (exit 1); JSON/SARIF on stdout stays clean. (#1164, closes #1159)
+- SCP-shorthand SSH URLs from non-`git` users -- `<user>@github.com:owner/repo` (EMU) and `<user>@ssh.dev.azure.com:v3/<org>/<project>/<repo>` (ADO) -- now parse correctly in dependency parsing and policy auto-discovery. (#1164)
+- `apm install` against a branch ref re-downloads when upstream advances past the lockfile-recorded SHA, and self-heals lockfiles produced by APM <= 0.12.2 on next install. (#1158)
+- In-package relative markdown links are rewritten to their `apm_modules/` location at install time so sibling references survive the `.agents/.github` deploy split. (#1160, closes #1147)
+- `.apm-pin` cache marker no longer leaks into skill deploy targets on subsequent installs. (#1153)
+
+## [0.12.2] - 2026-05-05
+
+### Added
+
+- **`apm audit` now catches forgotten installs and hand-edits by default.** No more shipping stale `.github/instructions/` because someone forgot to re-run `apm install`, no more silent hand-edits to regenerated content. Opt out with `--no-drift`. See the [Drift Detection guide](https://danielmeppiel.github.io/awd-cli/guides/drift-detection/). (#1137, closes #1071, supersedes scope of #898)
+
+### Fixed
+
+- **Parallel subdir install race.** `apm install` no longer intermittently fails with `RuntimeError: Subdirectory '<path>' not found in repository` when multiple dependencies (including ADO sub-path deps) resolve to different subdirectories of the same `repo@ref`. The shared clone cache now stores subdir-agnostic bare clones and each consumer materializes its own working tree (mirrors the WS3 `GitCache` pattern). (#1135, fixes #1126, fixes #1140)
+- **Re-installing the same package no longer rmtree's it.** `compute_package_hash` now excludes the `.apm-pin` cache marker (introduced by #1137) so the supply-chain content-hash check sees a stable hash across installs instead of falsely tripping and deleting `apm_modules/<owner>/<pkg>/`. (#1142, regression from #1137)
+
+### Changed
+
+- **Docs: `first-package` guide accuracy.** Clarifies how `includes: auto` actually behaves and corrects the skill deployment paths so a newcomer's first package matches what `apm install` writes to disk. (#1129)
+- **Docs: APM's role for skills, plugins-as-packages, ADO sub-paths.** Six user-surfaced doc gaps closed in one pass -- unifies the "plugin == package" framing, adds ADO sub-path install examples, and states the current stability posture so users stop guessing from release notes. (#1127)
 
 ## [0.12.1] - 2026-05-03
 
