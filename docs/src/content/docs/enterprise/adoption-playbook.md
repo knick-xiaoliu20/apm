@@ -266,5 +266,5 @@ working state with standard configuration files.
   shared packages for your organization.
 - [CI/CD Pipelines](../../integrations/ci-cd/) -- Add APM
   to your continuous integration pipeline.
-- [Governance](../governance/) -- Enforce standards and
+- [Governance Guide](../governance-guide/) -- Enforce standards and
   audit compliance across repositories.

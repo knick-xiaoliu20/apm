@@ -649,7 +649,7 @@ Create a fine-grained personal access token at [github.com/settings/personal-acc
   - Metadata: Read (to access basic repository information)
 
 ```bash
-export GITHUB_CLI_PAT=your_fine_grained_token
+export GITHUB_APM_PAT=your_fine_grained_token
 ```
 
 ### Option 2: Classic Token (Fallback)
@@ -984,10 +984,10 @@ your-package/
 **Solution**: 
 ```bash
 # Verify token is set
-echo $GITHUB_CLI_PAT
+echo $GITHUB_APM_PAT
 
 # Test token access
-curl -H "Authorization: token $GITHUB_CLI_PAT" https://api.github.com/user
+curl -H "Authorization: token $GITHUB_APM_PAT" https://api.github.com/user
 ```
 
 #### "Package validation failed"
@@ -1007,6 +1007,12 @@ curl -H "Authorization: token $GITHUB_CLI_PAT" https://api.github.com/user
 #### "File conflicts during installation"
 **Problem**: Local files collide with package files during `apm install`
 **Resolution**: APM skips files that exist locally and aren't managed by APM. The diagnostic summary at the end of install shows how many files were skipped. Use `--verbose` to see which files, or `--force` to overwrite.
+
+> **Security**: `--force` is dual-purpose -- it overwrites colliding
+> local files AND bypasses content-integrity drift detection (hidden-
+> character scan). Use only when the package source has been
+> independently verified. For routine overwrites without bypassing
+> the integrity gate, prefer `--update`.
 
 #### "File conflicts during compilation"
 **Problem**: Multiple packages or local files have same names

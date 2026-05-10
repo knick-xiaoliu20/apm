@@ -123,7 +123,7 @@ Content scanning extends beyond install:
 
 - **`apm compile`** scans compiled output (AGENTS.md, CLAUDE.md, `.github/copilot-instructions.md`, commands) before writing to disk. Critical findings cause `apm compile` to exit with code 1 after writing — defense-in-depth since source files were already scanned at install, but compilation assembles content from multiple sources. `.github/copilot-instructions.md` is assembled from global instructions in `.apm/instructions/`, including those installed under `apm_modules/`.
 - **`apm pack`** scans files before bundling. This catches hidden characters before a package is published, preventing authors from accidentally distributing tainted content.
-- **`apm unpack`** scans bundle contents before deployment. This is a pre-deployment gate matching `apm install` — critical findings block deployment unless `--force` is used.
+- **`apm unpack`** scans bundle contents before deployment. This is a pre-deployment gate matching `apm install` — critical findings block deployment unless `--force` is used. (Note: `apm unpack` is DEPRECATED and scheduled for removal in v0.14; prefer `apm install <bundle-path>` for new pipelines -- it applies the same scan plus lockfile integration. See [Pack and distribute](../../guides/pack-distribute/).)
 
 ### On-demand scanning
 
@@ -146,7 +146,7 @@ apm audit -f json -o report.json       # Machine-readable
 apm audit -f markdown -o report.md     # Step summaries
 ```
 
-See [Content scanning with `apm audit`](../governance/#content-scanning-with-apm-audit) for usage details and exit codes.
+See [Content scanning with `apm audit`](../../reference/cli-commands/#apm-audit---scan-for-hidden-unicode-characters) for usage details and exit codes.
 
 ### Limitations
 
@@ -321,7 +321,7 @@ Not without detection. APM scans all package source files before deployment. Cri
 
 ### How do I audit what APM installed?
 
-The `apm.lock.yaml` file records every dependency (with exact commit SHA) and every file deployed. It is a plain YAML file suitable for automated policy checks, diff review, and compliance tooling. See [Governance & Compliance](../governance/) for audit workflows.
+The `apm.lock.yaml` file records every dependency (with exact commit SHA) and every file deployed. It is a plain YAML file suitable for automated policy checks, diff review, and compliance tooling. See the [Governance Guide](../governance-guide/) for audit workflows.
 
 ### Is the APM binary signed?
 

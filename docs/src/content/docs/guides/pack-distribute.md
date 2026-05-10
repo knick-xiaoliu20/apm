@@ -285,6 +285,15 @@ The `pack:` section records the bundle `format`, the per-file `bundle_files` SHA
 
 ## `apm unpack`
 
+:::caution[Deprecated -- removal scheduled for v0.14]
+`apm unpack` is deprecated. Prefer `apm install <bundle-path>` for
+deploying packed bundles locally: it shares the same air-gapped path
+with no network I/O, integrates with target resolution, and records
+deployed files in the project lockfile (`local_deployed_files`).
+`apm unpack` is retained only for the legacy APM-format
+restore-without-APM workflow consumed by `microsoft/apm-action@v1`.
+:::
+
 :::note
 For APM consumers, prefer `apm install <bundle>` over `apm unpack`. `apm install` deploys both formats target-agnostically, persists provenance to the project lockfile (`local_deployed_files`), and works with directory or `.tar.gz` inputs. `apm unpack` is retained for the legacy APM-format restore-without-APM workflow consumed by `microsoft/apm-action@v1`.
 :::

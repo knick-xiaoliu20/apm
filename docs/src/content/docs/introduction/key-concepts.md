@@ -74,7 +74,8 @@ The APM CLI supports the following types of primitives:
 ## Where primitives live
 
 Primitives are authored in `.apm/` and deployed to runtime folders
-(`.github/`, `.claude/`, `.cursor/`, `.opencode/`) by `apm install` and
+(`.github/`, `.claude/`, `.cursor/`, `.opencode/`, `.codex/`, `.gemini/`,
+`.windsurf/`) by `apm install` and
 `apm compile`. For the full layout, source-vs-output distinction, and
 discovery rules, see [Anatomy of an APM Package](../anatomy-of-an-apm-package/).
 

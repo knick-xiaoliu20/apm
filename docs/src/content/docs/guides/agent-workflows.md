@@ -66,25 +66,19 @@ For more details on runtime capabilities and configuration, see the [Runtime Com
 
 ### Explicit scripts in apm.yml
 
-Define scripts in your `apm.yml` to map names to prompt files and runtimes:
+Define scripts in your `apm.yml` to map names to shell commands. The
+`scripts:` field is a flat mapping of `name: command-string` pairs --
+each value is a single shell command, not a nested object. (Source:
+`src/apm_cli/models/apm_package.py` -- `scripts: dict[str, str] | None`.)
 
 ```yaml
 scripts:
-  start:
-    description: "Default workflow"
-    prompt: .apm/prompts/start.prompt.md
-    runtime: copilot
-  review:
-    description: "Code review"
-    prompt: .apm/prompts/review.prompt.md
-    runtime: copilot
-  analyze:
-    description: "Log analysis"
-    prompt: .apm/prompts/analyze-logs.prompt.md
-    runtime: llm
+  start: codex apm-template.md
+  test: pytest tests/
 ```
 
-You can also use the shorthand format for simple scripts:
+You can chain runtime invocations, set environment variables, or pass
+flags directly in the value string:
 
 ```yaml
 scripts:
@@ -92,6 +86,10 @@ scripts:
   debug: "RUST_LOG=debug codex analyze-logs.prompt.md"
   llm-script: "llm analyze-logs.prompt.md -m github/gpt-4o-mini"
 ```
+
+> Object-form entries like `start: { description: ..., prompt: ..., runtime: ... }`
+> are NOT supported by the current schema and will fail manifest
+> validation. Use the flat `name: command` shape above.
 
 ### Auto-discovery (zero configuration)
 

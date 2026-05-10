@@ -35,7 +35,7 @@ dependencies:
 Run `apm install` and APM:
 
 - **Resolves transitive dependencies** — if package A depends on package B, both are installed automatically.
-- **Integrates primitives** -- prompts, agents, commands, skills, and hooks are deployed to `.github/`, `.claude/`, `.cursor/`, `.opencode/`, `.codex/`, and `.gemini/` based on which directories exist.
+- **Integrates primitives** -- prompts, agents, commands, skills, and hooks are deployed to `.github/`, `.claude/`, `.cursor/`, `.opencode/`, `.codex/`, `.gemini/`, and `.windsurf/` based on which directories exist.
 - **Compiles instructions** -- `apm compile` generates instruction roll-ups (`AGENTS.md`, `CLAUDE.md`, `GEMINI.md`) that each tool reads natively.
 
 ## APM vs. Manual Setup

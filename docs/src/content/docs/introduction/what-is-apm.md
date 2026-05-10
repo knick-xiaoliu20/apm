@@ -12,7 +12,7 @@ AI agent configuration has no equivalent. Until now.
 
 ## What is agent package management?
 
-AI coding agents — GitHub Copilot, Claude, Cursor, OpenCode, Codex, Gemini — are only as
+AI coding agents -- GitHub Copilot, Claude, Cursor, OpenCode, Codex, Gemini, Windsurf -- are only as
 good as the context they receive. That context is made up of instructions,
 skills, prompts, agent definitions, hooks, plugins, and MCP server
 configurations.
@@ -137,6 +137,12 @@ apm pack
 **Distribute.** Any git repository is a valid APM package. Publish by pushing
 to a git remote — no registry required. For offline distribution, CI artifact
 pipelines, or air-gapped environments, use `apm pack` and `apm unpack` to
+
+> Note: `apm unpack` is DEPRECATED and scheduled for removal in v0.14.
+> Use `apm install <bundle-path>` to deploy a packed bundle locally
+> (works with both directory and `.tar.gz` inputs, and persists
+> provenance to the project lockfile). See
+> [Pack and distribute](../guides/pack-distribute/) for the migration path.
 create and consume portable bundles without network access.
 
 ## Supported tools
@@ -199,7 +205,7 @@ underneath:
 ```
 +--------------------------------------------------+
 |  AI Coding Tools                                  |
-|  (Copilot, Claude, Cursor, OpenCode, Codex, Gemini)|
+|  (Copilot, Claude, Cursor, OpenCode, Codex, Gemini, Windsurf)|
 +--------------------------------------------------+
 |  Plugin / Extension Systems                       |
 |  (tool-specific capabilities)                     |
@@ -257,7 +263,7 @@ These surfaces are stable and recommended for production use:
 - `apm install`, `apm.lock.yaml`, `apm audit` - dependency resolution, version locking, security scanning.
 - `apm compile`, `apm pack`, `apm install <bundle-path>` - multi-tool output, bundle distribution, and supported local-bundle installation.
 - Authoring layout (`apm.yml`, `.apm/`) and consumption from GitHub, Azure DevOps, GitLab, Bitbucket, and self-hosted Git hosts.
-- Cross-tool deployment to GitHub Copilot, Claude Code, Cursor, OpenCode, Codex, and Gemini.
+- Cross-tool deployment to GitHub Copilot, Claude Code, Cursor, OpenCode, Codex, Gemini, and Windsurf.
 
 These surfaces are **experimental** and may change between releases:
 

@@ -75,7 +75,7 @@ False-positive guards normalize:
 | `apm audit --ci` | Reported and counted as failure | 1 |
 | `apm audit --no-drift` | Skipped entirely | governed only by other checks |
 
-In `--ci` mode drift findings are pooled with the seven baseline lockfile
+In `--ci` mode drift findings are pooled with the eight baseline lockfile
 checks (`lockfile-exists`, `ref-consistency`, etc.) plus integration
 drift detection -- a single non-zero exit covers all of them.
 

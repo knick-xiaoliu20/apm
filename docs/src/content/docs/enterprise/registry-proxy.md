@@ -147,7 +147,7 @@ What is and is not routed through the proxy:
 | `apm install` (Azure DevOps deps) | **No** | ADO uses a different download path; Artifactory backends recognize GitHub/GitLab archive prefixes only |
 | `apm install --mcp` | **No** | MCP servers come from a separate registry, not GitHub archives |
 | `apm marketplace add` / `browse` / `search` / `update` | Yes | `marketplace.json` fetched via Archive Entry Download; falls back to GitHub Contents API unless `PROXY_REGISTRY_ONLY=1` |
-| `apm pack` / `apm unpack` | N/A | Operate offline once dependencies are local; see [Air-gapped CI playbook](#air-gapped-ci-playbook) |
+| `apm pack` / `apm unpack` | N/A | Operate offline once dependencies are local; see [Air-gapped CI playbook](#air-gapped-ci-playbook). Note: `apm unpack` is DEPRECATED and scheduled for removal in v0.14 -- prefer `apm install <bundle-path>` for new pipelines. |
 | Policy file fetch (`apm-policy.yml`) | **No** | Policy discovery uses the GitHub API directly. See [Governance #9](../governance-guide/#9-air-gapped-and-offline) for the policy-cache offline story. |
 
 When `PROXY_REGISTRY_ONLY=1` is set and a surface is not proxy-routed (ADO,

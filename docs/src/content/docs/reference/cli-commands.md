@@ -97,6 +97,15 @@ apm install [PACKAGES...] [OPTIONS]
   - `vscode`, `agents` - Deprecated aliases for `copilot` (`.github/`). Still accepted by the parser; prefer `copilot` for GitHub Copilot deployment, or `agent-skills` for cross-client `.agents/skills/` deployment. Removal in v1.0.
 - `--update` - Update dependencies to latest Git references  
 - `--force` - Overwrite locally-authored files on collision; bypass security scan blocks
+
+> **Security**: `--force` on `apm install` is dual-purpose. It overwrites
+> locally-authored files on collision AND bypasses content-integrity
+> drift detection (the hidden-character scan that normally blocks
+> critical findings). Use only when you have independently verified
+> the package source. For routine overwrites without bypassing security
+> checks, prefer `--update` (which refreshes dependencies to latest Git
+> references without disabling the integrity gate). See
+> `src/apm_cli/commands/install.py` for the underlying flag wiring.
 - `--dry-run` - Show what would be installed without installing
 - `--parallel-downloads INTEGER` - Max concurrent package downloads (default: 4, 0 to disable)
 - `--verbose` - Show individual file paths and full error details in the diagnostic summary
@@ -376,6 +385,66 @@ Skills are copied directly to target directories:
 
 This makes all package primitives available in VSCode, Cursor, OpenCode, Claude Code, and compatible editors for immediate use with your coding agents.
 
+### `apm cache` - Manage the local package cache
+
+Inspect and maintain the local cache APM uses to avoid redundant
+network I/O. The cache root resolves to `~/.apm/cache/` by default
+(override via `APM_CACHE_DIR`), with two independent stores:
+
+- **Git cache** (`~/.apm/cache/git`) -- bare repository databases and
+  worktree checkouts keyed by resolved commit SHA.
+- **HTTP cache** (`~/.apm/cache/http`) -- conditional-GET responses for
+  the GitHub releases / API surfaces APM polls during install.
+
+```bash
+apm cache info
+apm cache clean [--force | --yes]
+apm cache prune [--days N]
+```
+
+#### `apm cache info` - Show cache location and size
+
+Prints the resolved cache root, per-entry counts (git db, git
+checkouts, HTTP entries), and a size breakdown for each store plus a
+combined total.
+
+```bash
+apm cache info
+```
+
+#### `apm cache clean` - Remove all cached content
+
+Wipes BOTH the git and HTTP caches in full. Prompts for confirmation
+unless `--force` (or `--yes` / `-y`) is passed; CI scripts should pass
+one of those flags so the command never blocks on stdin.
+
+```bash
+apm cache clean              # interactive prompt
+apm cache clean --force      # non-interactive (CI)
+```
+
+> Warning: this removes every cached commit and every cached HTTP
+> response. The next `apm install` will re-fetch everything from the
+> network. Use `prune` (below) when you only want to reclaim space
+> from stale entries.
+
+#### `apm cache prune` - Sweep stale entries by mtime
+
+Removes git cache checkouts whose filesystem `mtime` is older than
+`--days N` (default 30). The HTTP cache is NOT touched by `prune`.
+
+```bash
+apm cache prune              # default: older than 30 days
+apm cache prune --days 7     # tighter window
+```
+
+> Footgun: prune is **lockfile-blind** -- it does not consult any
+> project's `apm.lock.yaml` before evicting entries. A pinned commit
+> SHA that is currently referenced by your lockfile may be pruned if
+> nothing has touched its checkout recently; the next `apm install`
+> will re-clone it from the remote. This is safe but can surprise
+> air-gapped or rate-limited environments.
+
 ### `apm targets` - Show resolved deployment targets
 
 Inspect which harness targets `apm install` and `apm compile` will deploy to from the current directory, and why. This is the discovery surface for the resolution chain (`--target` flag > `apm.yml` `targets:` > auto-detect from filesystem signals).
@@ -540,7 +609,7 @@ apm audit [PACKAGE] [OPTIONS]
 - `-v, --verbose` - Show info-level findings and file details
 - `-f, --format [text|json|sarif|markdown]` - Output format: `text` (default), `json` (machine-readable), `sarif` (GitHub Code Scanning), `markdown` (step summaries). Cannot be combined with `--strip` or `--dry-run`.
 - `-o, --output PATH` - Write report to file. Auto-detects format from extension (`.sarif`, `.sarif.json` → SARIF; `.json` → JSON; `.md` → Markdown) when `--format` is not specified.
-- `--ci` - Run lockfile consistency checks for CI/CD gates. Exit 0 if clean, 1 if violations found. Auto-discovers org policy from the org `.github` repo unless `--no-policy` is set. Runs the 7 baseline checks: lockfile presence, ref consistency, deployed files present, no orphaned packages, MCP config consistency, content integrity (Unicode + hash drift on every deployed file including local content), includes consent (advisory). Integration drift detection runs by default alongside the baseline checks and contributes to the exit code (use `--no-drift` to opt out).
+- `--ci` - Run lockfile consistency checks for CI/CD gates. Exit 0 if clean, 1 if violations found. Auto-discovers org policy from the org `.github` repo unless `--no-policy` is set. Runs the 8 baseline checks: lockfile presence, ref consistency, deployed files present, no orphaned packages, skill-subset consistency, MCP config consistency, content integrity (Unicode + hash drift on every deployed file including local content), includes consent (advisory). Integration drift detection runs by default alongside the baseline checks and contributes to the exit code (use `--no-drift` to opt out).
 - `--policy SOURCE` - *(Experimental)* Policy source. Accepts: `org` (auto-discover from your project's git remote), `owner/repo` (defaults to github.com), an `https://` URL, or a local file path. Used with `--ci` for policy checks. Without this flag, `--ci` auto-discovers.
 - `--no-policy` - Skip policy discovery and enforcement entirely. Equivalent to `APM_POLICY_DISABLE=1`.
 - `--no-cache` - Force fresh policy fetch (skip cache). Only relevant with policy discovery active.
@@ -622,6 +691,13 @@ apm audit --ci --policy org --no-fail-fast
 Diagnostic commands for the organization-level `apm-policy.yml` resolved by APM at install / audit time. See [Policy Reference](../../enterprise/policy-reference/) for the full schema and enforcement model.
 
 #### `apm policy status` - Show resolved policy state
+
+> **Warning**: `apm policy status` ALWAYS exits 0 in its default mode,
+> even when discovery fails or the resolved policy reports violations.
+> It is informational only -- a diagnostic surface, not a CI gate.
+> Pass `--check` to exit non-zero when no usable policy is found,
+> or use `apm audit --ci --policy <source>` to gate on rule
+> violations.
 
 Show what policy APM resolved for the current project: discovery outcome, source, enforcement level, cache age, `extends:` chain, and effective rule counts. Trust-but-verify diagnostic for admins and CI gates.
 
@@ -744,11 +820,15 @@ dependencies:
 
 ### `apm unpack` - Extract a bundle
 
-> **Deprecated (since 0.12).** Prefer `apm install <bundle-path>` for deploying
-> local bundles -- it shares the same air-gapped path with no network I/O,
-> integrates with target resolution, and records deployed files in the
-> project lockfile (`local_deployed_files`). `apm unpack` remains available
-> for raw archive extraction without integration semantics.
+> **Deprecated -- removal scheduled for v0.14.** Prefer
+> `apm install <bundle-path>` for deploying local bundles -- it shares
+> the same air-gapped path with no network I/O, integrates with target
+> resolution, and records deployed files in the project lockfile
+> (`local_deployed_files`). `apm unpack` remains available for raw
+> archive extraction without integration semantics; new pipelines
+> should use `apm install` against the bundle directory or
+> `.tar.gz` directly. See [Pack and distribute](../../guides/pack-distribute/)
+> for the migration path.
 
 Extract an APM bundle into the current project with optional completeness verification.
 
