@@ -1446,6 +1446,17 @@ def install(  # noqa: PLR0913
         )
         summary_rendered = True
 
+        if frozen and apm_count > 0:
+            # --frozen verifies LOCKFILE STRUCTURE (every apm.yml dep
+            # has a lock entry), not on-disk content integrity. Make
+            # the scope explicit so a CI pipeline that skips
+            # 'apm audit' on the assumption that --frozen covers SHA
+            # verification is corrected at the moment of use.
+            _rich_info(
+                "Lockfile presence verified. Run 'apm audit' for on-disk content integrity.",
+                symbol="info",
+            )
+
     except InsecureDependencyPolicyError:
         _maybe_rollback_manifest(_snapshot_manifest_path, _manifest_snapshot, logger)
         sys.exit(1)
@@ -1660,7 +1671,7 @@ def _install_apm_packages(ctx, outcome):
             sys.exit(1)
         except FrozenInstallError as e:
             _maybe_rollback_manifest(ctx.snapshot_manifest_path, ctx.manifest_snapshot, logger)
-            logger.error(str(e))
+            _rich_error(str(e))
             for reason in e.reasons:
                 _rich_echo(reason)
             sys.exit(1)

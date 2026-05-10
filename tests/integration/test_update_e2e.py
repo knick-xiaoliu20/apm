@@ -21,6 +21,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -154,3 +155,156 @@ class TestFrozenE2E:
         assert result.returncode != 0
         combined = result.stdout + result.stderr
         assert "frozen" in combined.lower() and "update" in combined.lower()
+
+
+class TestUpdateInteractiveDecline:
+    """Cover the interactive 'user declines the plan' path end-to-end.
+
+    The unit-tier CliRunner test mocks ``click.confirm`` and exits
+    before the install pipeline runs. This class exercises the full
+    real-binary flow with a real TTY-attached subprocess so the test
+    catches regressions in TTY detection, stdin plumbing, and the
+    lockfile-untouched contract on decline.
+
+    Skipped on Windows: ``pty.openpty`` is POSIX-only.
+    """
+
+    @pytest.mark.skipif(
+        sys.platform.startswith("win"),
+        reason="pty.openpty is POSIX-only; decline path is covered by unit tests on Windows",
+    )
+    def test_decline_at_prompt_leaves_lockfile_untouched(self, temp_project, apm_command):
+        """``apm update`` with TTY stdin and 'n' answer mutates nothing.
+
+        Sequence:
+
+        1. Install the sample package -> writes ``apm.lock.yaml``
+           pinning the resolved commit.
+        2. Mutate ``apm.yml`` to pin a new ref so the next resolve
+           sees a real planned change to confirm.
+        3. Spawn ``apm update`` with a real PTY attached to stdin so
+           the prompt actually fires.
+        4. Send ``n\\n`` to decline.
+        5. Assert: rc == 0, "No changes applied" surfaces, and the
+           lockfile commit field is byte-identical to the pre-update
+           state (the decline path performed no on-disk mutation).
+        """
+        _write_apm_yml(temp_project, ["microsoft/apm-sample-package"])
+        first = _run_apm(apm_command, ["install"], temp_project)
+        assert first.returncode == 0, first.stderr
+
+        lockfile = temp_project / "apm.lock.yaml"
+        assert lockfile.exists(), "install should have produced apm.lock.yaml"
+        lockfile_before = lockfile.read_bytes()
+
+        _write_apm_yml_with_ref(
+            temp_project,
+            "microsoft/apm-sample-package",
+            ref="main",
+        )
+
+        rc, output = _run_apm_with_pty(
+            apm_command,
+            ["update"],
+            cwd=temp_project,
+            stdin_text="n\n",
+            timeout=180,
+        )
+
+        assert rc == 0, f"apm update (declined) returned rc={rc}\noutput:\n{output}"
+        assert "no changes applied" in output.lower(), (
+            f"Decline path did not surface 'No changes applied':\n{output}"
+        )
+        lockfile_after = lockfile.read_bytes()
+        assert lockfile_after == lockfile_before, (
+            "Lockfile bytes changed after user declined the plan -- "
+            "the decline path leaked an on-disk mutation."
+        )
+
+
+def _write_apm_yml_with_ref(project_dir: Path, package: str, *, ref: str) -> None:
+    """Write apm.yml using the structured object form so a ref pin is honored."""
+    config = {
+        "name": "update-test",
+        "version": "1.0.0",
+        "dependencies": {
+            "apm": [{"repo": package, "ref": ref}],
+            "mcp": [],
+        },
+    }
+    (project_dir / "apm.yml").write_text(
+        yaml.dump(config, default_flow_style=False), encoding="utf-8"
+    )
+
+
+def _run_apm_with_pty(
+    apm_command: str,
+    args: list[str],
+    *,
+    cwd: Path,
+    stdin_text: str,
+    timeout: int,
+) -> tuple[int, str]:
+    """Run apm with a real PTY attached so interactive prompts actually fire.
+
+    Returns ``(returncode, combined_output)``. The PTY is allocated in
+    the parent; stdout / stderr are merged into the master fd just like
+    a real terminal would surface them. ``stdin_text`` is delivered as
+    typed keystrokes (write to master).
+    """
+    import os
+    import pty
+    import select
+    import time
+
+    master_fd, slave_fd = pty.openpty()
+    try:
+        proc = subprocess.Popen(
+            [apm_command, *args],
+            cwd=str(cwd),
+            stdin=slave_fd,
+            stdout=slave_fd,
+            stderr=slave_fd,
+            close_fds=True,
+        )
+    finally:
+        os.close(slave_fd)
+
+    os.write(master_fd, stdin_text.encode("utf-8"))
+
+    deadline = time.monotonic() + timeout
+    chunks: list[bytes] = []
+    try:
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                proc.kill()
+                raise TimeoutError(f"apm {' '.join(args)} did not exit within {timeout}s")
+            ready, _, _ = select.select([master_fd], [], [], min(0.5, remaining))
+            if ready:
+                try:
+                    chunk = os.read(master_fd, 4096)
+                except OSError:
+                    chunk = b""
+                if not chunk:
+                    break
+                chunks.append(chunk)
+            if proc.poll() is not None:
+                # Drain anything still buffered before exiting the loop.
+                while True:
+                    ready, _, _ = select.select([master_fd], [], [], 0.1)
+                    if not ready:
+                        break
+                    try:
+                        chunk = os.read(master_fd, 4096)
+                    except OSError:
+                        chunk = b""
+                    if not chunk:
+                        break
+                    chunks.append(chunk)
+                break
+    finally:
+        os.close(master_fd)
+
+    proc.wait(timeout=5)
+    return proc.returncode, b"".join(chunks).decode("utf-8", errors="replace")

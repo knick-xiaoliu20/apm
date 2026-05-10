@@ -285,7 +285,7 @@ class InstallLogger(CommandLogger):
         else:
             _rich_success("All dependencies are up to date.", symbol="check")
         if lockfile_present and not update_mode:
-            _rich_info("Run 'apm update' to check for newer versions.")
+            _rich_info("Lockfile already satisfied -- run 'apm update' to resolve latest refs.")
 
     # --- Download phase ---
 

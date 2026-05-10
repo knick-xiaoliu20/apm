@@ -53,14 +53,26 @@ from ..install.plan import UpdatePlan, render_plan_text
 from ..utils.console import _rich_echo, _rich_error, _rich_info, _rich_success, _rich_warning
 
 
-def _has_apm_yml(start: Path | None = None) -> bool:
-    """Return True when an ``apm.yml`` is present in ``start`` (or cwd).
+def _find_apm_yml(start: Path | None = None) -> Path | None:
+    """Walk parent directories from ``start`` (or cwd) to find ``apm.yml``.
 
-    No parent traversal: matches the resolution scope of ``apm install``,
-    which only honours an ``apm.yml`` in the working directory.
+    Matches the npm / cargo / poetry ergonomic: a developer running
+    ``apm update`` from a subdirectory of their project (``src/``,
+    ``docs/``, ``scripts/``) finds the manifest and operates on it,
+    rather than getting silently misrouted to the deprecated
+    self-update shim.
+
+    The walk stops at the filesystem root or when an ``apm.yml`` is
+    found, whichever comes first. Returns the absolute path to the
+    ``apm.yml`` file when found; ``None`` when no project root is
+    discoverable from ``start`` upward.
     """
-    cwd = start or Path.cwd()
-    return (cwd / "apm.yml").is_file()
+    cwd = (start or Path.cwd()).resolve()
+    for candidate in (cwd, *cwd.parents):
+        manifest = candidate / "apm.yml"
+        if manifest.is_file():
+            return manifest
+    return None
 
 
 def _stdin_is_tty() -> bool:
@@ -125,7 +137,8 @@ def update(
         apm update --yes        # Skip the prompt (CI-safe)
         apm update --verbose    # Include unchanged deps in the plan
     """
-    if not _has_apm_yml():
+    manifest_path = _find_apm_yml()
+    if manifest_path is None:
         # Back-compat shim (one-release): when run outside a project,
         # forward to the renamed self-updater so existing users keep
         # working while we publicise ``apm self-update``.  Removed in
@@ -153,11 +166,52 @@ def update(
         ctx.invoke(_self_update_cmd, check=True)
         return
 
-    _run_dep_update(assume_yes=assume_yes, dry_run=dry_run, verbose=verbose)
+    project_root = manifest_path.parent
+    if project_root != Path.cwd().resolve():
+        _rich_info(
+            f"Using apm.yml at {manifest_path} (project root: {project_root})",
+            symbol="info",
+        )
+
+    _run_dep_update(
+        assume_yes=assume_yes,
+        dry_run=dry_run,
+        verbose=verbose,
+        project_root=project_root,
+    )
 
 
-def _run_dep_update(*, assume_yes: bool, dry_run: bool, verbose: bool) -> None:
-    """Core ``apm update`` flow: resolve, plan, prompt, install."""
+def _run_dep_update(
+    *,
+    assume_yes: bool,
+    dry_run: bool,
+    verbose: bool,
+    project_root: Path | None = None,
+) -> None:
+    """Core ``apm update`` flow: resolve, plan, prompt, install.
+
+    When ``project_root`` is provided, the working directory is
+    switched to it before running so install pipeline paths
+    (``apm.yml``, ``apm.lock.yaml``, deployed primitives) resolve
+    against the discovered project root, not the caller's cwd.
+    """
+    import os
+
+    if project_root is not None and project_root != Path.cwd().resolve():
+        os.chdir(project_root)
+
+    # Surface the new semantics to CI users on every invocation: the
+    # interactive prompt aborts non-TTY runs anyway, but a banner up
+    # front prevents "why did our pipeline break overnight?" tickets
+    # from teams whose CI calls 'apm update' assuming it self-updates
+    # the CLI binary.
+    if os.environ.get("CI") or os.environ.get("GITHUB_ACTIONS"):
+        _rich_info(
+            "'apm update' refreshes APM dependencies. "
+            "Use 'apm self-update' to update the CLI binary.",
+            symbol="info",
+        )
+
     try:
         from apm_cli.commands.install import _install_apm_dependencies  # local import: heavy module
         from apm_cli.core.scope import InstallScope

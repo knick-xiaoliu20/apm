@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `apm install --force` help text now states explicitly that the flag does NOT refresh refs; users who want newer commits should run `apm update`. (#1244)
+- `apm update` now walks parent directories to find `apm.yml` (matching npm/cargo ergonomics), emits a one-time CI banner when invoked from a project root under `CI`/`GITHUB_ACTIONS` so pipelines see the dependency-refresh shift, and the no-op nudge copy now reads "Lockfile already satisfied -- run `apm update` to resolve latest refs." `apm install --frozen` adds a post-success "Run `apm audit` for on-disk content integrity." footer to set the right expectation, and FrozenInstallError now renders identically across `install` and `update`. (#1244)
 - `apm marketplace browse/search/add/update` route through the registry proxy when `PROXY_REGISTRY_URL` is set; `PROXY_REGISTRY_ONLY=1` blocks direct GitHub and GitLab host API fallbacks. (#1149)
 - Registry proxy now warns when `PROXY_REGISTRY_TOKEN` is set and `PROXY_REGISTRY_URL` uses `http://`, since the bearer token would be transmitted in plaintext; set `PROXY_REGISTRY_ALLOW_HTTP=1` to silence the warning for trusted internal proxies. (#1149)
 - Integration tests now use marker-driven discovery: 21 `pytestmark = pytest.mark.skipif(...)` chains across `tests/integration/` are replaced with declarative `requires_*` markers, with precondition logic centralized in `tests/integration/conftest.py` and auto-skipping at collection time. PR1 of #1166. (#1167)
