@@ -205,7 +205,7 @@ The `#` separator carries a raw git ref that overrides the `source.ref` from the
 
 APM resolves the plugin name against the marketplace index, fetches the underlying Git repository using the resolved ref, and installs it as a standard APM dependency. The resolved source appears in `apm.yml` and `apm.lock.yaml` just like any direct dependency.
 
-On **GitLab-class** hosts (`gitlab.com` and self-managed instances when APM classifies the host as GitLab), monorepo layouts—plugins whose `marketplace.json` sources point at a subdirectory **inside** the marketplace repository—work with this syntax; you do not need a manual `git:` + `path:` dependency entry for `apm install`. When you declare Git dependencies yourself in `apm.yml`, nested paths may still need the object form with explicit `git:` and `path:`—see the [Dependencies guide](./dependencies/).
+On **GitLab-class** hosts (`gitlab.com` and self-managed instances when APM classifies the host as GitLab), monorepo layouts—plugins whose `marketplace.json` sources point at a subdirectory **inside** the marketplace repository—work with this syntax; you do not need a manual `git:` + `path:` dependency entry for `apm install`. When you declare Git dependencies yourself in `apm.yml`, nested paths may still need the object form with explicit `git:` and `path:`—see the [Dependencies guide](../dependencies/).
 
 For full `apm install` options, see [CLI Commands](../../reference/cli-commands/).
 

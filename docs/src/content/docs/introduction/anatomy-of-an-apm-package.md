@@ -5,7 +5,7 @@ sidebar:
   order: 5
 ---
 
-If you have read [What is APM?](./what-is-apm/) and [How It Works](./how-it-works/),
+If you have read [What is APM?](../what-is-apm/) and [How It Works](../how-it-works/),
 you know APM is a package manager for agent primitives. This page answers the
 next question every user asks: what does an APM package actually look like on
 disk, and why does it look that way?

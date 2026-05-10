@@ -79,4 +79,4 @@ If the dev-only skill appears in the dry-run output, it is sitting under `.apm/`
 - [Anatomy of an APM Package](../../introduction/anatomy-of-an-apm-package/) -- why `.apm/` is the publishable source root.
 - [Manifest Schema 3.9 -- `includes`](../../reference/manifest-schema/#39-includes) -- allow-list semantics, no exclude form.
 - [Manifest Schema 5 -- `devDependencies`](../../reference/manifest-schema/#5-devdependencies) -- the field reference.
-- [Pack & Distribute -- Plugin format](./pack-distribute/#plugin-format-vs-apm-format) -- what the scanner emits.
+- [Pack & Distribute -- Plugin format](../pack-distribute/#plugin-format-vs-apm-format) -- what the scanner emits.

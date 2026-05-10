@@ -179,7 +179,7 @@ When `apm.yml` declares a `marketplace:` block, `apm pack` ALSO emits `.claude-p
 - **Per-plugin `plugin.json` files**: run `apm pack` per subdirectory (each subdirectory has its own `apm.yml`) to produce a schema-conformant `plugin.json` for every plugin.
 - **Marketplace pass-through**: with `strict: false` on entries, the marketplace entry's pass-through fields (`description`, `version`, `author`, ...) stand in for the plugin manifest -- consumers read them directly from `marketplace.json`.
 
-See [Authoring a marketplace](./marketplace-authoring/) for the full schema and build flow.
+See [Authoring a marketplace](../marketplace-authoring/) for the full schema and build flow.
 
 ### `devDependencies` exclusion
 
@@ -191,7 +191,7 @@ apm install --dev owner/test-helpers
 
 This keeps third-party development-only packages (test helpers, lint rules) out of distributed plugins.
 
-**Caveat for primitives you author yourself:** the dev/prod split is enforced via the lockfile's `is_dev` marker for resolved dependencies. The local-content scanner that ships your own `.apm/` content does NOT consult that marker -- it bundles everything under `.apm/`. To keep maintainer-only primitives (release-checklist skills, internal debugging agents) out of plugin bundles, author them OUTSIDE `.apm/` (e.g. under `dev/`) and reference them via a local-path devDependency. See [Dev-only Primitives](./dev-only-primitives/).
+**Caveat for primitives you author yourself:** the dev/prod split is enforced via the lockfile's `is_dev` marker for resolved dependencies. The local-content scanner that ships your own `.apm/` content does NOT consult that marker -- it bundles everything under `.apm/`. To keep maintainer-only primitives (release-checklist skills, internal debugging agents) out of plugin bundles, author them OUTSIDE `.apm/` (e.g. under `dev/`) and reference them via a local-path devDependency. See [Dev-only Primitives](../dev-only-primitives/).
 
 ## Bundle structure (APM format, `--format apm`)
 

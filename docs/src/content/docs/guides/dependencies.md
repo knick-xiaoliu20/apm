@@ -36,7 +36,7 @@ APM supports multiple dependency types:
 
 **Virtual File Packages** download a single file (like a prompt or instruction) and integrate it directly.
 
-**Marketplaces:** Plugins installed as `apm install name@marketplace` resolve from a registered index. On **GitLab-class** hosts, monorepo plugins whose sources live in a subdirectory of the marketplace repository itself are supported without hand-writing object-form `git:` + `path:` entries. See the [Marketplaces guide](./marketplaces/).
+**Marketplaces:** Plugins installed as `apm install name@marketplace` resolve from a registered index. On **GitLab-class** hosts, monorepo plugins whose sources live in a subdirectory of the marketplace repository itself are supported without hand-writing object-form `git:` + `path:` entries. See the [Marketplaces guide](../marketplaces/).
 
 For self-hosted **Gitea** and **Gogs**, virtual subdirectory and file packages resolve via the `/{owner}/{repo}/raw/{ref}/{path}` URL first, then fall back to the Contents API (v1 native, v3 Gogs-compat). On **GitLab-class** hosts (gitlab.com and self-managed GitLab), virtual subdirectory and file packages resolve via the GitLab REST v4 `/projects/{id}/repository/files/{path}/raw` endpoint with `PRIVATE-TOKEN` auth.
 
