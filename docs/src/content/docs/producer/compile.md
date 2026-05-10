@@ -1,0 +1,137 @@
+---
+title: Compile your package
+description: Turn the primitives in .apm/ into deployed harness files during local authoring, without touching dependencies.
+---
+
+`apm compile` reads the primitives in `.apm/` and writes per-harness
+deployed files into your working tree. It does not fetch packages, does
+not resolve dependencies, and does not write the lockfile. Use it when
+you are iterating on a primitive locally and want to see what each
+harness will actually receive.
+
+```bash
+apm compile
+```
+
+That command transforms every primitive under `.apm/` (and anything
+already unpacked under `apm_modules/`) into the native format each
+target harness expects: `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`,
+populated `.github/`, `.claude/`, `.cursor/`, `.codex/`, `.gemini/`,
+`.opencode/`, `.windsurf/` directories, and the cross-tool
+`.agents/skills/` directory.
+
+For the full reach map of which primitive lands where, see
+[Primitives and targets](../../concepts/primitives-and-targets/). For
+the place compile takes in the broader flow, see
+[Lifecycle](../../concepts/lifecycle/).
+
+## The authoring loop
+
+```
+edit .apm/  ->  apm compile  ->  inspect output  ->  repeat
+```
+
+You will run this loop a lot while writing a new skill, prompt, or
+agent. Three flags speed it up:
+
+```bash
+apm compile --watch              # re-run on every change
+apm compile --validate           # check frontmatter and structure; emit nothing
+apm compile --dry-run            # print placement decisions without writing files
+```
+
+`--validate` is the fastest signal that a primitive parses. `--dry-run`
+shows you exactly which files would land where. `--watch` is the tight
+inner loop while you edit prose.
+
+To preview a script that wraps a `.prompt.md` file, use
+[`apm preview`](../preview-and-validate/) instead. `apm compile` builds
+the deployed primitives; `apm preview` shows the rewritten command line
+your script will execute.
+
+## Pick a target
+
+By default `apm compile` detects targets from your workspace (see
+[detection cascade](#detection-cascade) below). Override it with
+`--target` (`-t`):
+
+```bash
+apm compile --target claude
+apm compile --target copilot,cursor          # comma-separated
+apm compile --target all                     # every canonical target
+apm compile --all                            # equivalent shorthand
+```
+
+Accepted values: `copilot`, `claude`, `cursor`, `opencode`, `codex`,
+`gemini`, `windsurf`, `agent-skills`, `all`. The `agent-skills` slug
+deploys to the cross-tool `.agents/skills/` directory; `all` is every
+harness *except* `agent-skills` (combine them if you want both).
+Unknown slugs are rejected before any work runs.
+
+## Detection cascade
+
+When you omit `--target`, APM resolves which targets to build in this
+order:
+
+1. Explicit `--target <slug>` flag.
+2. The `targets:` field in your `apm.yml`.
+3. Auto-detect: any harness root directory (`.github/`, `.claude/`,
+   `.cursor/`, `.codex/`, `.gemini/`, `.opencode/`, `.windsurf/`) that
+   already exists.
+4. Fallback: `minimal` -- writes a single `AGENTS.md` and skips per-
+   harness folders.
+
+Pin `targets:` in `apm.yml` if you want the same compile output on
+every machine. Full rules and the per-target output map live in
+[Primitives and targets](../../concepts/primitives-and-targets/#how-a-target-is-selected).
+
+## Where files land
+
+Per target, with the primitive shape on disk after compile:
+
+| Target | Output |
+|---|---|
+| `copilot` | `AGENTS.md` plus `.github/{prompts,instructions,chatmodes}/` |
+| `claude` | `CLAUDE.md` plus `.claude/{commands,rules,agents,settings.json}` |
+| `cursor` | `.cursor/rules/*.mdc`, `.cursor/commands/`, `.cursor/agents/` |
+| `codex` | `AGENTS.md` plus `.codex/` (TOML agents and hooks) |
+| `gemini` | `GEMINI.md` plus `.gemini/{commands,settings.json}` |
+| `opencode` | `.opencode/` (project) or `~/.config/opencode/` |
+| `windsurf` | `.windsurf/{rules,skills,workflows}/` |
+| `agent-skills` | `.agents/skills/<name>/SKILL.md` |
+
+## compile vs install
+
+| You want to... | Run |
+|---|---|
+| Iterate on a local primitive in `.apm/` | `apm compile` |
+| Add a dependency or refresh `apm_modules/` | `apm install` (see [Install packages](../../consumer/install-packages/)) |
+| Verify deployed bytes match the lockfile | `apm audit` |
+
+`apm install` runs compile internally during its integrate phase, and
+`apm run` auto-compiles any `.prompt.md` referenced by the script just
+before execution. Reach for `apm compile` directly when you do not
+want either of those side effects -- typically while authoring.
+
+## Pitfalls
+
+- **Forgetting `--target` on a clean workspace.** With no harness
+  folder present and no `targets:` in `apm.yml`, the cascade falls
+  back to `minimal` and writes only `AGENTS.md`. The CLI prints a
+  hint, but the easy fix is to either create the harness folder or
+  pin `targets:` in your manifest.
+- **Stale `AGENTS.md` after deleting a primitive.** Compile leaves
+  previous output in place by default. Pass `--clean` to remove
+  orphaned files generated by earlier runs.
+- **Hand-edited primitives skip the security scan.** `apm compile`
+  does not run the install-time hidden-Unicode scan. After hand-edits,
+  run `apm audit` before publishing. See
+  [drift and secure-by-default](../../consumer/drift-and-secure-by-default/).
+- **Zero-output success.** If compile reports success but writes no
+  files, your project either has no primitives, or every requested
+  target was rejected. The CLI surfaces this as a warning -- check
+  `targets:` and the contents of `.apm/`.
+
+Once your primitives compile cleanly into the harnesses you care
+about, package the result with [`apm pack`](../pack-a-bundle/) and
+share it via [a marketplace](../publish-to-a-marketplace/).

@@ -140,12 +140,14 @@ the rationale.
 ## Inspect what got installed
 
 ```bash
-apm list                  # tree view of installed packages
-apm view <package>        # details for one package
+apm list                  # list scripts declared in apm.yml
+apm view <package>        # details for one installed package
 ```
 
-Both read from `apm.lock.yaml` and `apm_modules/`. Use them when you
-want to confirm what shipped without re-running install.
+`apm view` reads from `apm.lock.yaml` and `apm_modules/` -- use it to
+confirm what shipped without re-running install. `apm list` shows the
+runnable scripts your manifest exposes (see
+[Run scripts](../run-scripts/)).
 
 ## Useful flags
 
