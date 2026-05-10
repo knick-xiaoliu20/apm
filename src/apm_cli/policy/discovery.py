@@ -1079,7 +1079,7 @@ def _policy_to_dict(policy: ApmPolicy) -> dict:
             "content_types": policy.manifest.content_types,
         },
         "unmanaged_files": {
-            "action": policy.unmanaged_files.action,
+            "action": policy.unmanaged_files.effective_action,
             "directories": list(policy.unmanaged_files.directories),
         },
     }
@@ -1114,7 +1114,7 @@ def _is_policy_empty(policy: ApmPolicy) -> bool:
         and not policy.manifest.required_fields
         and policy.manifest.scripts == "allow"
         and policy.manifest.content_types is None
-        and policy.unmanaged_files.action == "ignore"
+        and policy.unmanaged_files.effective_action == "ignore"
     )
 
 

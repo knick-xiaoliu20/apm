@@ -688,7 +688,7 @@ def _check_unmanaged_files(
     policy: UnmanagedFilesPolicy,
 ) -> CheckResult:
     """Check 16: no untracked files in governance directories."""
-    if policy.action == "ignore":
+    if policy.effective_action == "ignore":
         return CheckResult(
             name="unmanaged-files",
             passed=True,
