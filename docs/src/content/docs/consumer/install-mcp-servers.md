@@ -67,7 +67,7 @@ apm install --mcp linear --transport http --url https://mcp.linear.app/sse
 
 `apm mcp install NAME ...` is an alias that forwards to the same code
 path. The `apm mcp` group also provides `search`, `list`, and `show`
-for discovery -- see the [CLI reference](../../reference/cli-commands/).
+for discovery -- see the [CLI reference](../../reference/cli/install/).
 
 ## What `apm install` writes to disk
 
@@ -173,7 +173,7 @@ apm mcp show <name>       # detailed server info
 apm mcp install <name>    # alias for `apm install --mcp <name>`
 ```
 
-Full flag tables and exit codes: [CLI reference](../../reference/cli-commands/).
+Full flag tables and exit codes: [CLI reference](../../reference/cli/install/).
 
 ## Next
 

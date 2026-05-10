@@ -171,4 +171,4 @@ consumer-side workflow.
   enterprise authentication guide.
 - Lockfile pinning: [Manage dependencies](../manage-dependencies/).
 - Resolve / verify / integrate phases: [Lifecycle](../../concepts/lifecycle/).
-- CLI flags: [CLI reference](../../reference/cli-commands/).
+- CLI flags: [CLI reference](../../reference/cli/install/).

@@ -12,7 +12,7 @@ agent script. Five minutes, four commands. This is the consumer path --
 you are running someone else's package, not authoring one.
 
 If you want to publish a package, jump to the
-[pack and distribute guide](/apm/guides/pack-distribute/). If you are
+[pack and distribute guide](/apm/producer/). If you are
 rolling APM out across an org, start with the
 [governance guide](/apm/enterprise/governance-guide/).
 
@@ -37,7 +37,7 @@ apm --version
 ```
 
 For Homebrew, Scoop, pip, air-gapped mirrors, or signed-archive install,
-see [Installation](/apm/getting-started/installation/).
+see [Installation](/apm/quickstart/).
 
 ## 2. Initialize a project
 
@@ -143,7 +143,7 @@ APM borrows npm's verbs but the meanings shift in two places:
   longer in `apm.yml`, like `npm prune`.
 
 For private packages, set `GITHUB_APM_PAT` -- see
-[private packages](/apm/guides/private-packages/).
+[private packages](/apm/consumer/private-and-org-packages/).
 :::
 
 ## 4. Run an agent
@@ -175,7 +175,7 @@ available in this project.
 
 Other runtimes work the same way -- swap `copilot` for `codex` or `llm`
 in both the `apm runtime setup` and the script body. See
-[Agent workflows](/apm/guides/agent-workflows/) for the full matrix.
+[Agent workflows](/apm/producer/author-primitives/instructions-and-agents/) for the full matrix.
 
 ## What next
 
@@ -183,12 +183,12 @@ in both the `apm runtime setup` and the script body. See
   <Card title="Use more packages" icon="open-book">
     Browse the consumer guide: search marketplaces, pin versions, manage
     transitive dependencies, and wire MCP servers into every harness.
-    [Dependencies](/apm/guides/dependencies/)
+    [Dependencies](/apm/consumer/manage-dependencies/)
   </Card>
   <Card title="Author your own" icon="rocket">
     Build a primitive others can install -- skills, prompts, agents,
     plugins -- and pack it for distribution.
-    [Pack and distribute](/apm/guides/pack-distribute/)
+    [Pack and distribute](/apm/producer/)
   </Card>
   <Card title="Govern installs at scale" icon="setting">
     Ship `apm-policy.yml`, gate CI with `apm audit --ci`, and pin a

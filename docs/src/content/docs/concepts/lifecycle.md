@@ -37,7 +37,7 @@ Targets are picked in priority order. An explicit `--target copilot,claude` flag
 - Re-running `apm init` in a directory that already has `apm.yml` warns and exits unless you pass `-y` (which overwrites the manifest).
 - If you set `targets:` to an empty list in `apm.yml`, target detection runs again at compile time. To pin targets, list them explicitly.
 
-**Read more:** [`apm init` reference](/apm/reference/cli-commands/), [package anatomy](/apm/concepts/package-anatomy/).
+**Read more:** [`apm init` reference](/apm/reference/cli/install/), [package anatomy](/apm/concepts/package-anatomy/).
 
 ## 2. INSTALL
 
@@ -66,7 +66,7 @@ Order of operations is deterministic and worth memorizing:
 - The scan is not optional in normal operation. If you need to land an install with a known critical finding (for example, an upstream package you cannot patch yet), use `--force` and document the exception.
 - Transitive MCP servers are gated behind explicit trust. If a deep dependency declares a new MCP server, install pauses to ask you to re-declare it in your top-level `apm.yml`. Use `--trust-transitive-mcp` to skip this in trusted environments.
 
-**Read more:** [`apm install` reference](/apm/reference/cli-commands/), [security](/apm/enterprise/security/), [policy reference](/apm/enterprise/policy-reference/).
+**Read more:** [`apm install` reference](/apm/reference/cli/install/), [security](/apm/enterprise/security/), [policy reference](/apm/enterprise/policy-reference/).
 
 ## 3. COMPILE
 
@@ -85,7 +85,7 @@ The `--target` flag accepts a comma-separated list (`copilot,claude,cursor,openc
 - Running `apm compile` does not re-run the security scan. The scan happens at install time. If you hand-edit primitives between installs, run `apm audit` to scan them.
 - `--clean` removes orphaned `AGENTS.md` files from previous compilations. Without it, removed primitives can leave stale output behind.
 
-**Read more:** [`apm compile` reference](/apm/reference/cli-commands/), [compilation guide](/apm/guides/compilation/).
+**Read more:** [`apm compile` reference](/apm/reference/cli/install/), [compilation guide](/apm/producer/compile/).
 
 ## 4. RUN
 
@@ -119,7 +119,7 @@ The `scripts:` shape is intentionally identical to `package.json`. Object-form s
 - A script that does not reference any `.prompt.md` file runs as-is. APM only rewrites the command when it finds `.prompt.md` arguments.
 - Parameters passed with `--param` only reach prompt files. They do not become shell environment variables.
 
-**Read more:** [`apm run` reference](/apm/reference/cli-commands/), [agent workflows guide](/apm/guides/agent-workflows/).
+**Read more:** [`apm run` reference](/apm/reference/cli/install/), [agent workflows guide](/apm/producer/author-primitives/instructions-and-agents/).
 
 ## 5. AUDIT
 
@@ -140,4 +140,4 @@ apm audit --file <path>    # standalone: scan an arbitrary file
 - `apm audit --ci` exits 1 on any failure -- this is the gate you wire into branch protection. The local `apm audit` exits 0 even when findings exist, unless you also pass `--strip` and writes fail.
 - The drift check rebuilds the full context from scratch; on large repos, expect a few seconds of overhead. If your CI loop cannot afford it, narrow with `--no-drift` and accept reduced coverage.
 
-**Read more:** [`apm audit` reference](/apm/reference/cli-commands/), [policy reference](/apm/enterprise/policy-reference/) for the full check list, [security](/apm/enterprise/security/).
+**Read more:** [`apm audit` reference](/apm/reference/cli/install/), [policy reference](/apm/enterprise/policy-reference/) for the full check list, [security](/apm/enterprise/security/).

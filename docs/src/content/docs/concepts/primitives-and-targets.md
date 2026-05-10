@@ -27,28 +27,28 @@ Executable, parameterized AI workflows. Equivalent to a callable program for an 
 
 - Source: `.apm/prompts/*.prompt.md`
 - Also surfaced as **commands** for harnesses that read slash-commands (see commands row below).
-- Deep dive: [Prompts guide](/apm/guides/prompts/)
+- Deep dive: [Prompts guide](/apm/producer/author-primitives/prompts/)
 
 ### Agents
 
 Specialized AI personalities with tool boundaries and expertise scope.
 
 - Source: `.apm/agents/*.agent.md` (legacy: `.chatmode.md`)
-- Deep dive: [Agent workflows](/apm/guides/agent-workflows/)
+- Deep dive: [Agent workflows](/apm/producer/author-primitives/instructions-and-agents/)
 
 ### Skills
 
 Cross-tool meta-guides authored in the agent-skills `SKILL.md` format. Bundled resources live alongside the skill.
 
 - Source: `.apm/skills/<name>/SKILL.md` or root `SKILL.md`
-- Deep dive: [Skills guide](/apm/guides/skills/)
+- Deep dive: [Skills guide](/apm/producer/author-primitives/skills/)
 
 ### Hooks
 
 Lifecycle event handlers (e.g. `PreToolUse`, `PostToolUse`, `Stop`) that invoke scripts.
 
 - Source: `.apm/hooks/*.json` (or top-level `hooks/`)
-- Deep dive: [MCP servers + hooks](/apm/guides/mcp-servers/)
+- Deep dive: [MCP servers + hooks](/apm/consumer/install-mcp-servers/)
 
 ### Commands
 
@@ -59,14 +59,14 @@ Slash-commands for harnesses that expose a command palette. Sourced from `.apm/p
 A packaging format. A plugin is a self-contained bundle (`plugin.json` or `.claude-plugin/`) that ships a set of primitives. APM normalizes plugins at install time into the same primitives the rest of this page describes.
 
 - Source: `plugin.json` at package root
-- Deep dive: [Plugins guide](/apm/guides/plugins/)
+- Deep dive: [Plugins guide](/apm/producer/author-primitives/)
 
 ### MCP servers
 
 Model Context Protocol servers declared as dependencies. APM writes the per-harness MCP config file at install time.
 
 - Source: `apm.yml` -> `dependencies.mcp:`
-- Deep dive: [MCP servers](/apm/guides/mcp-servers/)
+- Deep dive: [MCP servers](/apm/consumer/install-mcp-servers/)
 
 ## Target catalogue
 
@@ -125,7 +125,7 @@ How to read a cell:
 
 Mark a primitive as dev-only when it is useful to the package author but should not ship to consumers: release checklists, internal debugging agents, test-fixture skills, anything tied to your own infrastructure. Author such primitives outside `.apm/` (typically `dev/`) and reference them under `devDependencies` in `apm.yml`. `apm pack` excludes them; `apm install --dev` deploys them locally.
 
-Full pattern, the three pack-time gotchas, and verification steps: [Dev-only primitives](/apm/guides/dev-only-primitives/).
+Full pattern, the three pack-time gotchas, and verification steps: [Dev-only primitives](/apm/producer/author-primitives/).
 
 ## How a target is selected
 
@@ -140,4 +140,4 @@ Full pattern, the three pack-time gotchas, and verification steps: [Dev-only pri
 
 Unknown target slugs are rejected upstream by the manifest parser; they never silently fall through to the default.
 
-For flag reference and exact resolution semantics, see [`apm compile` and `apm install`](/apm/reference/cli-commands/). For policy controls that further restrict which primitives a target may deploy, see [Governance guide](/apm/enterprise/governance-guide/).
+For flag reference and exact resolution semantics, see [`apm compile` and `apm install`](/apm/reference/cli/install/). For policy controls that further restrict which primitives a target may deploy, see [Governance guide](/apm/enterprise/governance-guide/).

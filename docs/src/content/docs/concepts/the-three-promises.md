@@ -43,7 +43,7 @@ git clone <repo> && cd <repo> && apm install
 ### Read more
 
 - Lifecycle of an install: [Lifecycle](/apm/concepts/lifecycle/)
-- Lockfile fields and semantics: [CLI commands](/apm/reference/cli-commands/)
+- Lockfile fields and semantics: [CLI commands](/apm/reference/cli/install/)
 
 ## Promise 2: Secure by default
 

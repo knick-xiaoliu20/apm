@@ -68,7 +68,7 @@ Runs automatically as the final phase of `apm install`.
 NOT a build step that produces an artifact. Compile only deploys to
 local harness directories.
 
-See: [Compilation guide](/apm/guides/compilation/).
+See: [Compilation guide](/apm/producer/compile/).
 Source: `src/apm_cli/commands/compile/`.
 
 ### dev-only primitive
@@ -94,7 +94,7 @@ NOT a separate token type. It is a standard GitHub PAT; the
 `GITHUB_APM_PAT` name exists so APM-scoped tokens do not collide with
 other tooling.
 
-See: [Authentication](/apm/getting-started/authentication/).
+See: [Authentication](/apm/consumer/authentication/).
 Source: `src/apm_cli/core/auth.py`.
 
 ### harness
@@ -150,7 +150,7 @@ consumers can discover and install them by short name.
 NOT a registry. A marketplace is human-curated discovery; the registry
 is the resolution backend that APM actually downloads from.
 
-See: [Marketplaces guide](/apm/guides/marketplaces/).
+See: [Marketplaces guide](/apm/consumer/private-and-org-packages/).
 Source: `src/apm_cli/commands/marketplace/`.
 
 ### MCP server
@@ -190,7 +190,7 @@ standard pipeline.
 NOT a different thing from a package at runtime. Plugin format is the
 input shape; once detected, APM handles plugins exactly like packages.
 
-See: [Plugins guide](/apm/guides/plugins/).
+See: [Plugins guide](/apm/producer/author-primitives/).
 Source: `src/apm_cli/bundle/local_bundle.py`,
 `src/apm_cli/commands/install.py`.
 

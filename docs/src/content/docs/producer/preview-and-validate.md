@@ -78,7 +78,7 @@ fast way to confirm your `scripts:` block is well-formed and your
 
 For a tree of installed dependencies (versions, sources, primitive
 counts), use `apm deps list` instead. See
-[CLI reference](../../reference/cli-commands/) for both.
+[CLI reference](../../reference/cli/install/) for both.
 
 ## apm outdated
 

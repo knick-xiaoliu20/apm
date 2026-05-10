@@ -85,7 +85,7 @@ Flags like `--update`, `--only`, `--dev`, `--mcp`, `--registry`, and
 does not run the resolver, MCP registry lookup, or policy chain that those
 flags configure. APM rejects them up front with one consolidated error.
 
-For the full flag list see the [`apm install` reference](../../reference/cli-commands/).
+For the full flag list see the [`apm install` reference](../../reference/cli/install/).
 
 ## Targets
 

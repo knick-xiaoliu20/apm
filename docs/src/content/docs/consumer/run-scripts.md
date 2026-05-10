@@ -122,5 +122,5 @@ their authoring format and let the runtime see compiled text.
 ## Read more
 
 - Install primitives first: [install packages](../install-packages/)
-- Inspect what will execute: `apm preview` in the [CLI reference](../../reference/cli-commands/)
+- Inspect what will execute: `apm preview` in the [CLI reference](../../reference/cli/install/)
 - The portability promise: [the three promises](../../concepts/the-three-promises/)

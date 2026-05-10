@@ -164,7 +164,7 @@ apm install -v                         # verbose: show resolution and integratio
 ```
 
 For the full flag reference, run `apm install --help` or see
-[CLI commands](../../reference/cli-commands/).
+[CLI commands](../../reference/cli/install/).
 
 ## When things go wrong
 

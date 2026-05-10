@@ -106,7 +106,7 @@ The install command resolves the new entry, downloads it into
 `apm_modules/`, updates `apm.lock.yaml` with the resolved commit and
 content hash, and recompiles the deployed primitives for every target
 harness. Critical security findings block the install; pass `--force` only
-if you understand the risk. See [Reference -> CLI commands](../../reference/cli-commands/)
+if you understand the risk. See [Reference -> CLI commands](../../reference/cli/install/)
 for the full flag list.
 
 ## Pin a version
