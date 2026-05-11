@@ -13,6 +13,7 @@ from ...utils.github_host import (
     is_github_hostname,
     is_gitlab_hostname,
     is_supported_git_host,
+    is_visualstudio_legacy_hostname,
     maybe_raise_bare_fqdn_github_gitlab_conflict,
     parse_artifactory_path,
     unsupported_host_error,
@@ -816,7 +817,12 @@ class DependencyReference:
         is_artifactory = is_generic_host and is_artifactory_path(path_segments)
 
         if is_ado:
-            min_base_segments = 3
+            # *.visualstudio.com encodes org in the subdomain; path is proj/repo (2 parts).
+            # dev.azure.com encodes org as the first path segment; path is org/proj/repo (3 parts).
+            if validated_host and is_visualstudio_legacy_hostname(validated_host):
+                min_base_segments = 2
+            else:
+                min_base_segments = 3
         elif is_artifactory:
             # Artifactory: artifactory/{repo-key}/{owner}/{repo}
             min_base_segments = 4
@@ -971,11 +977,22 @@ class DependencyReference:
         if len(parts) >= 3 and is_supported_git_host(parts[0]):
             host = parts[0]
             if is_azure_devops_hostname(parts[0]):
-                if len(parts) < 5:
-                    raise ValueError(
-                        "Invalid Azure DevOps virtual package format: must be dev.azure.com/org/project/repo/path"
-                    )
-                repo_url = "/".join(parts[1:4])
+                if is_visualstudio_legacy_hostname(parts[0]):
+                    # myorg.visualstudio.com/proj/repo/path: org in subdomain,
+                    # need at least host + proj + repo + 1 virtual segment.
+                    if len(parts) < 4:
+                        raise ValueError(
+                            "Invalid Azure DevOps virtual package format: must be "
+                            "myorg.visualstudio.com/project/repo/path"
+                        )
+                    repo_url = "/".join(parts[1:3])
+                else:
+                    # dev.azure.com/org/proj/repo/path: org in path
+                    if len(parts) < 5:
+                        raise ValueError(
+                            "Invalid Azure DevOps virtual package format: must be dev.azure.com/org/project/repo/path"
+                        )
+                    repo_url = "/".join(parts[1:4])
             elif is_artifactory_path(parts[1:]):
                 art_result = parse_artifactory_path(parts[1:])
                 if art_result:
@@ -1022,7 +1039,11 @@ class DependencyReference:
 
         if len(parts) >= 3 and is_supported_git_host(parts[0]):
             host = parts[0]
-            if is_azure_devops_hostname(host) and len(parts) >= 4:
+            if is_visualstudio_legacy_hostname(host) and len(parts) >= 3:
+                # *.visualstudio.com/proj/repo: org is in the subdomain, path is proj/repo only
+                user_repo = "/".join(parts[1:3])
+            elif is_azure_devops_hostname(host) and len(parts) >= 4:
+                # dev.azure.com/org/proj/repo: org is the first path segment
                 user_repo = "/".join(parts[1:4])
             elif not is_github_hostname(host) and not is_azure_devops_hostname(host):
                 if is_artifactory_path(parts[1:]):
@@ -1058,7 +1079,10 @@ class DependencyReference:
         is_ado_host = host and is_azure_devops_hostname(host)
 
         if is_ado_host:
-            if len(uparts) < 3:
+            # *.visualstudio.com encodes org in subdomain -> proj/repo is sufficient (2 parts).
+            # dev.azure.com encodes org in path -> org/proj/repo required (3 parts).
+            min_ado_parts = 2 if is_visualstudio_legacy_hostname(host) else 3
+            if len(uparts) < min_ado_parts:
                 raise ValueError(
                     f"Invalid Azure DevOps repository format: {repo_url}. Expected 'org/project/repo'"
                 )
@@ -1118,14 +1142,19 @@ class DependencyReference:
         url_virtual_path: str | None = None
 
         if is_ado_host:
-            if len(path_parts) < 3:
+            # *.visualstudio.com encodes org in the subdomain; URL path is proj/repo (2 parts).
+            # dev.azure.com encodes org as the first path segment; URL path is org/proj/repo (3 parts).
+            is_vs_legacy = is_visualstudio_legacy_hostname(hostname)
+            min_ado_parts = 2 if is_vs_legacy else 3
+            if len(path_parts) < min_ado_parts:
                 raise ValueError(
                     f"Invalid Azure DevOps repository path: expected 'org/project/repo', got '{path}'"
                 )
-            if len(path_parts) > 3:
+            if len(path_parts) > min_ado_parts:
                 # Extra segments are a virtual sub-path (e.g. sub/path in
-                # https://dev.azure.com/org/proj/_git/repo/sub/path).
-                ado_virtual = "/".join(path_parts[3:])
+                # https://dev.azure.com/org/proj/_git/repo/sub/path or
+                # https://myorg.visualstudio.com/proj/_git/repo/sub/path).
+                ado_virtual = "/".join(path_parts[min_ado_parts:])
 
                 # Security: reject path traversal in virtual path.
                 validate_path_segments(ado_virtual, context="virtual path")
@@ -1154,7 +1183,13 @@ class DependencyReference:
                         )
 
                 url_virtual_path = ado_virtual
-                path_parts = path_parts[:3]
+                path_parts = path_parts[:min_ado_parts]
+
+            # For *.visualstudio.com, inject the org from the subdomain so that the
+            # normalised repo_url is always org/project/repo (matching dev.azure.com).
+            if is_vs_legacy:
+                vs_org = hostname.split(".")[0]
+                path_parts = [vs_org, *path_parts]
         else:
             if len(path_parts) < 2:
                 raise ValueError(

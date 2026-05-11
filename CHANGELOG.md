@@ -23,10 +23,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`git: parent` monorepo transitive dependency inheritance:** packages in a git monorepo can reference sibling paths via `{ git: parent, path: ... }` without repeating the full `git:` URL; the lockfile stores expanded host, repository, subdirectory path, and resolved ref/commit like other virtual git dependencies (no `parent` sentinel as durable identity). (#1149)
 - If you use the `gh` CLI, APM is now zero-config for private GitHub packages on github.com, `*.ghe.com`, and GHES: APM uses your active `gh auth login` token (`gh auth token --hostname <host>`) before falling back to `git credential fill`. Silently skipped when `gh` is not installed or not logged in for the host. (#630)
 
-### Fixed
-
-- ADO full HTTPS URLs with sub-path virtual packages (e.g. `https://dev.azure.com/org/proj/_git/repo/sub/path`) are now parsed correctly instead of being rejected. (#1128)
-
 ### Changed
 
 - `apm install --force` help text now states explicitly that the flag does NOT refresh refs; users who want newer commits should run `apm update`. (#1244)
@@ -41,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- ADO full HTTPS URLs with sub-path virtual packages (e.g. `https://dev.azure.com/org/proj/_git/repo/sub/path`) are now parsed correctly instead of being rejected. (#1254)
 - `apm marketplace add` accepts GitLab-class hosts (`gitlab.com` and self-managed instances configured via `GITLAB_HOST` / `APM_GITLAB_HOSTS`); unsupported generic hosts now show separate recovery hints for GHES (`GITHUB_HOST`) and self-managed GitLab instead of only `GITHUB_HOST`. (#1149)
 - **GitLab monorepo marketplaces:** `apm install plugin@marketplace` now resolves plugins whose sources live in a subdirectory of the marketplace repository on GitLab-class hosts (`gitlab.com` and self-managed GitLab when classified as GitLab), matching explicit `git:` + `path:` semantics without requiring that hand-written object form. (#1149)
 - `apm install` now rejects unsupported flat-format `dependencies` (e.g. `dependencies: [owner/repo]`) with a clear error and structured-format hint instead of silently ignoring them; the resolver also surfaces `ValueError` from malformed transitive manifests as warnings instead of swallowing them. (#1189)
