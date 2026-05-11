@@ -89,12 +89,15 @@ export default defineConfig({
 				themes: ['github-dark', 'github-light'],
 				styleOverrides: {
 					borderRadius: '0.5rem',
+					borderWidth: '1px',
+					codeFontSize: '0.875rem',
+					codeLineHeight: '1.5',
 					frames: {
 						shadowColor: 'transparent',
 					},
 				},
-				defaultProps: {
-					wrap: true,
+				frames: {
+					showCopyToClipboardButton: true,
 				},
 			},
 			plugins: [
