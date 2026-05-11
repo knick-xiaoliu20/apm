@@ -1108,10 +1108,11 @@ class GitHubPackageDownloader:
                         is_commit_sha=bool(is_commit_sha),
                     )
 
-                def _shared_bare_fetch_fn(existing_bare: Path, sha: str) -> bool:
+                def _shared_bare_fetch_fn(existing_bare: Path, ref_or_sha: str) -> bool:
+                    # get_or_clone passes `ref` here; for SHA pins it is the SHA.
                     return self._fetch_sha_into_bare(
                         existing_bare,
-                        sha,
+                        ref_or_sha,
                         dep_ref=dep_ref,
                     )
 

@@ -55,6 +55,9 @@ class SharedCloneCache:
         # Used to locate an existing bare for the same repo when a new ref
         # (typically a SHA pin on a transitive dep) is requested.
         self._repo_bares: dict[tuple[str, str, str], list[tuple[str | None, Path]]] = {}
+        # Per-bare-path locks to serialise concurrent Tier-0 fetches into the
+        # same bare (git concurrent pack-file writes are not safe).
+        self._bare_fetch_locks: dict[Path, threading.Lock] = {}
 
     def __enter__(self) -> "SharedCloneCache":
         return self
@@ -111,19 +114,30 @@ class SharedCloneCache:
             if ref and fetch_fn:
                 existing_bare = self._find_repo_bare(host, owner, repo)
                 if existing_bare is not None:
+                    # Acquire a per-bare lock so concurrent Tier-0 fetches
+                    # into the same bare are serialised (git pack-file writes
+                    # are not concurrent-safe).
+                    with self._lock:
+                        if existing_bare not in self._bare_fetch_locks:
+                            self._bare_fetch_locks[existing_bare] = threading.Lock()
+                        bare_lock = self._bare_fetch_locks[existing_bare]
                     try:
-                        if fetch_fn(existing_bare, ref):
-                            entry.path = existing_bare
-                            return existing_bare
+                        with bare_lock:
+                            if fetch_fn(existing_bare, ref):
+                                entry.path = existing_bare
+                                with self._lock:
+                                    repo_key = (host, owner, repo)
+                                    if repo_key not in self._repo_bares:
+                                        self._repo_bares[repo_key] = []
+                                    self._repo_bares[repo_key].append((ref, existing_bare))
+                                return existing_bare
                     except Exception:
-                        _log.debug(
-                            "Fetch into existing bare failed for %s/%s/%s ref=%s, "
-                            "falling through to fresh clone",
+                        _log.info(
+                            "Bare fetch miss for %s/%s/%s ref=%s, falling back to fresh clone",
                             host,
                             owner,
                             repo,
                             ref,
-                            exc_info=True,
                         )
 
             # First caller (or retry after failure): perform the clone.
@@ -199,6 +213,7 @@ class SharedCloneCache:
             self._temp_dirs.clear()
             self._entries.clear()
             self._repo_bares.clear()
+            self._bare_fetch_locks.clear()
         for d in dirs_to_remove:
             try:
                 shutil.rmtree(d, ignore_errors=True)

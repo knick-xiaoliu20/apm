@@ -24,6 +24,7 @@ delegating instance methods on the class.
 from __future__ import annotations
 
 import logging
+import os
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
@@ -33,6 +34,8 @@ from git import Repo
 
 if TYPE_CHECKING:
     from ..models.apm_package import DependencyReference
+
+_log = logging.getLogger(__name__)
 
 
 def _rmtree(path: Path) -> None:
@@ -343,7 +346,6 @@ def fetch_sha_into_bare(
     """
     from ..utils.git_env import get_git_executable
 
-    _log = logging.getLogger(__name__)
     git_exe = get_git_executable()
 
     def _rev_parse_present() -> bool:
@@ -364,6 +366,20 @@ def fetch_sha_into_bare(
             return result.returncode == 0
         except Exception:
             return False
+
+    def _scrub_fetch_head() -> None:
+        """Truncate FETCH_HEAD to remove the token-embedded URL written by fetch."""
+        fetch_head = bare_path / "FETCH_HEAD"
+        try:
+            if fetch_head.exists():
+                fetch_head.write_text("")
+        except OSError as exc:
+            _log.warning(
+                "Failed to truncate FETCH_HEAD at %s: %s. Tokenized URL "
+                "may persist on disk until shared cache cleanup.",
+                fetch_head,
+                exc,
+            )
 
     # Step 1: check first -- no network if SHA already present.
     _log.debug("fetch_sha_into_bare: checking if %s is present in %s", sha[:12], bare_path)
@@ -393,27 +409,35 @@ def fetch_sha_into_bare(
                 dep_ref=dep_ref,
                 clone_action=_fetch_action_sha,
             )
+            _scrub_fetch_head()
             if _rev_parse_present():
                 _log.debug("fetch_sha_into_bare: shallow fetch of %s succeeded", sha[:12])
                 return True
-        except subprocess.CalledProcessError:
+        except subprocess.CalledProcessError as exc:
+            stderr_text = ""
+            if exc.stderr:
+                stderr_text = exc.stderr.decode(errors="replace").strip()
             _log.debug(
-                "fetch_sha_into_bare: shallow fetch of %s failed, broadening shallow",
+                "fetch_sha_into_bare: shallow fetch of %s failed: %s",
                 sha[:12],
+                stderr_text,
             )
         except Exception:
             _log.debug(
                 "fetch_sha_into_bare: shallow fetch of %s raised unexpected error",
                 sha[:12],
-                exc_info=True,
             )
 
     # Step 3: broaden shallow -- fetch all refs without a SHA argument.
+    # Depth is capped to avoid unbounded history download on large repos.
+    # Override via APM_BROAD_FETCH_DEPTH environment variable.
+    broad_depth = os.environ.get("APM_BROAD_FETCH_DEPTH", "50")
+    _log.info("Hydrating missing commit %s into shared bare for %s", sha[:12], repo_url_base)
     _log.debug("fetch_sha_into_bare: broadening shallow in %s to find %s", bare_path, sha[:12])
 
     def _fetch_action_broad(url: str, env: dict[str, str], target: Path) -> None:
         subprocess.run(
-            [git_exe, "-C", str(bare_path), "fetch", url],
+            [git_exe, "-C", str(bare_path), "fetch", f"--depth={broad_depth}", url],
             env=env,
             check=True,
             capture_output=True,
@@ -427,25 +451,28 @@ def fetch_sha_into_bare(
             dep_ref=dep_ref,
             clone_action=_fetch_action_broad,
         )
+        _scrub_fetch_head()
         if _rev_parse_present():
             _log.debug("fetch_sha_into_bare: broad fetch succeeded, %s now present", sha[:12])
             return True
-    except subprocess.CalledProcessError:
+    except subprocess.CalledProcessError as exc:
+        stderr_text = ""
+        if exc.stderr:
+            stderr_text = exc.stderr.decode(errors="replace").strip()
         _log.debug(
-            "fetch_sha_into_bare: broad fetch failed for %s in %s",
+            "fetch_sha_into_bare: broad fetch failed for %s in %s: %s",
             sha[:12],
             bare_path,
+            stderr_text,
         )
     except Exception:
         _log.debug(
             "fetch_sha_into_bare: broad fetch raised unexpected error for %s",
             sha[:12],
-            exc_info=True,
         )
 
     _log.debug(
-        "fetch_sha_into_bare: all fetch attempts exhausted for %s in %s; "
-        "caller should fall back to a fresh clone",
+        "fetch_sha_into_bare: all fetch attempts exhausted for %s in %s",
         sha[:12],
         bare_path,
     )

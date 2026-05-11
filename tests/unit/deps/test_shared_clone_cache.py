@@ -696,8 +696,84 @@ class TestMaterializeFromBare:
         config_text = (consumer / ".git" / "config").read_text()
         assert "autocrlf = false" in config_text or "autocrlf=false" in config_text
 
+    def test_materialize_known_sha_checks_out_correct_commit(self, tmp_path: Path) -> None:
+        """materialize_from_bare checks out known_sha, not HEAD."""
+        import subprocess as sp
 
-class TestSharedCloneCacheBareInvariant:
+        from apm_cli.deps.bare_cache import materialize_from_bare
+
+        bare = tmp_path / "bare.git"
+        consumer = tmp_path / "consumer"
+
+        env = {k: v for k, v in __import__("os").environ.items()}
+
+        git_exe = "git"
+
+        # Create a normal repo with 2 commits, then clone as bare.
+        src = tmp_path / "src"
+        src.mkdir()
+        sp.run([git_exe, "init", "-b", "main", str(src)], env=env, check=True, capture_output=True)
+        sp.run(
+            [git_exe, "-C", str(src), "config", "user.email", "t@t"],
+            env=env,
+            check=True,
+            capture_output=True,
+        )
+        sp.run(
+            [git_exe, "-C", str(src), "config", "user.name", "t"],
+            env=env,
+            check=True,
+            capture_output=True,
+        )
+        (src / "a.txt").write_text("first")
+        sp.run([git_exe, "-C", str(src), "add", "."], env=env, check=True, capture_output=True)
+        sp.run(
+            [git_exe, "-C", str(src), "commit", "-m", "first"],
+            env=env,
+            check=True,
+            capture_output=True,
+        )
+        first_sha = sp.run(
+            [git_exe, "-C", str(src), "rev-parse", "HEAD"],
+            env=env,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        (src / "b.txt").write_text("second")
+        sp.run([git_exe, "-C", str(src), "add", "."], env=env, check=True, capture_output=True)
+        sp.run(
+            [git_exe, "-C", str(src), "commit", "-m", "second"],
+            env=env,
+            check=True,
+            capture_output=True,
+        )
+
+        # Clone as bare
+        sp.run(
+            [git_exe, "clone", "--bare", str(src), str(bare)],
+            env=env,
+            check=True,
+            capture_output=True,
+        )
+
+        # Materialize with known_sha pointing to the FIRST commit
+        resolved = materialize_from_bare(bare, consumer, ref=None, env=env, known_sha=first_sha)
+
+        # Assert HEAD in consumer equals first_sha
+        consumer_head = sp.run(
+            [git_exe, "-C", str(consumer), "rev-parse", "HEAD"],
+            env=env,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        assert consumer_head == first_sha, f"Expected {first_sha}, got {consumer_head}"
+        assert resolved == first_sha
+        # First commit should have a.txt but NOT b.txt
+        assert (consumer / "a.txt").exists()
+        assert not (consumer / "b.txt").exists()
+
     """6.16: cache enforces bare-shape invariant in debug mode."""
 
     def test_apm_debug_rejects_non_bare_clone(self, tmp_path: Path, monkeypatch) -> None:
@@ -1249,10 +1325,14 @@ class TestFetchShaIntoBare:
 
         call_args = mock_run_fetch.call_args[0][0]
         assert explicit_url in call_args
-        # Verify "origin" is NOT used as a shorthand
+        # Verify "origin" is NOT used as a shorthand (remote URL is redacted)
         assert "origin" not in call_args or call_args.index("origin") < call_args.index(
             explicit_url
         )
+        # Ensure 'origin' shorthand is never used (remote URL is redacted)
+        for call_args_item in mock_run_fetch.call_args_list:
+            argv = call_args_item[0][0] if call_args_item[0] else call_args_item[1].get("args", [])
+            assert "origin" not in argv, f"Found 'origin' in fetch argv: {argv}"
 
 
 # ---------------------------------------------------------------------------
@@ -1479,6 +1559,31 @@ class TestSharedCloneCacheRepoReuse:
         cache.cleanup()
         found_after = cache._find_repo_bare("github.com", "owner", "repo")
         assert found_after is None
+
+    def test_fetch_fn_none_skips_tier0(self, tmp_path: Path) -> None:
+        """When fetch_fn is None, Tier-0 is skipped even if repo_bares has entries."""
+        cache = SharedCloneCache(base_dir=tmp_path)
+        clone_called = threading.Event()
+
+        def clone_fn(target: Path) -> None:
+            clone_called.set()
+            target.mkdir(parents=True, exist_ok=True)
+            (target / "HEAD").write_text("ref: refs/heads/main\n")
+
+        # First clone populates _repo_bares
+        cache.get_or_clone("gh", "o", "r", "main", clone_fn)
+
+        # Second call with fetch_fn=None should NOT try Tier-0
+        clone2_called = threading.Event()
+
+        def clone_fn2(target: Path) -> None:
+            clone2_called.set()
+            target.mkdir(parents=True, exist_ok=True)
+            (target / "HEAD").write_text("ref: refs/heads/main\n")
+
+        cache.get_or_clone("gh", "o", "r", "dev", clone_fn2, fetch_fn=None)
+        assert clone2_called.is_set(), "Should have cloned fresh when fetch_fn=None"
+        cache.cleanup()
 
 
 # ---------------------------------------------------------------------------
