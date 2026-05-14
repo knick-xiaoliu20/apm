@@ -1,0 +1,207 @@
+{
+  "pr": {
+    "number": 1091,
+    "title": "feat: add distributed tracing support via OpenTelemetry",
+    "author": "dev-rodrigo",
+    "base_branch": "main",
+    "head_branch": "feat/otel-tracing",
+    "description": "Integrates OpenTelemetry SDK for distributed tracing across all service boundaries. Adds span creation, context propagation, and exporter configuration. This is a foundational change that other teams will build on.",
+    "labels": ["enhancement", "observability", "breaking-change"],
+    "created_at": "2024-11-14T09:22:00Z",
+    "updated_at": "2024-11-15T16:45:00Z",
+    "draft": false,
+    "mergeable": true,
+    "additions": 487,
+    "deletions": 112,
+    "changed_files": 23
+  },
+  "diff_summary": [
+    {
+      "file": "src/telemetry/tracer.ts",
+      "status": "added",
+      "additions": 134,
+      "deletions": 0,
+      "patch_summary": "New TracerProvider wrapper with auto-instrumentation hooks and configurable sampler. Exposes startSpan, withSpan, and propagateContext helpers."
+    },
+    {
+      "file": "src/telemetry/exporters.ts",
+      "status": "added",
+      "additions": 89,
+      "deletions": 0,
+      "patch_summary": "OTLP HTTP and gRPC exporter factory. Reads endpoint and auth token from environment variables OTEL_EXPORTER_OTLP_ENDPOINT and OTEL_EXPORTER_OTLP_HEADERS."
+    },
+    {
+      "file": "src/telemetry/index.ts",
+      "status": "added",
+      "additions": 18,
+      "deletions": 0,
+      "patch_summary": "Re-exports public API surface for telemetry module."
+    },
+    {
+      "file": "src/middleware/request-tracer.ts",
+      "status": "added",
+      "additions": 72,
+      "deletions": 0,
+      "patch_summary": "Express/Fastify-compatible middleware that creates a root span per incoming HTTP request and attaches trace-id to response headers."
+    },
+    {
+      "file": "src/config/index.ts",
+      "status": "modified",
+      "additions": 31,
+      "deletions": 8,
+      "patch_summary": "Added telemetry config block with serviceName, serviceVersion, tracesSampleRate, and exporterType fields. Breaks existing config shape — consumers must update their config files."
+    },
+    {
+      "file": "src/http/client.ts",
+      "status": "modified",
+      "additions": 44,
+      "deletions": 19,
+      "patch_summary": "Injects W3C traceparent header on outbound requests when an active span exists. Removes legacy X-Request-ID propagation logic."
+    },
+    {
+      "file": "src/db/query-runner.ts",
+      "status": "modified",
+      "additions": 38,
+      "deletions": 14,
+      "patch_summary": "Wraps each query execution in a child span with db.statement and db.operation attributes. Uses AsyncLocalStorage to retrieve parent context."
+    },
+    {
+      "file": "src/queue/consumer.ts",
+      "status": "modified",
+      "additions": 27,
+      "deletions": 11,
+      "patch_summary": "Extracts trace context from message metadata headers before processing. Falls back to a new root span when no context is present."
+    },
+    {
+      "file": "package.json",
+      "status": "modified",
+      "additions": 9,
+      "deletions": 3,
+      "patch_summary": "Added @opentelemetry/sdk-node, @opentelemetry/exporter-trace-otlp-http, @opentelemetry/exporter-trace-otlp-grpc, @opentelemetry/instrumentation-http, @opentelemetry/instrumentation-pg as direct dependencies."
+    },
+    {
+      "file": "docs/observability.md",
+      "status": "added",
+      "additions": 65,
+      "deletions": 0,
+      "patch_summary": "New observability guide covering tracer setup, sampler configuration, and exporter options with example environment variable configurations."
+    }
+  ],
+  "comments": [
+    {
+      "author": "dev-priya",
+      "body": "The config breaking change concerns me. Do we have a migration guide or a compatibility shim for existing deployments? Some teams are on a quarterly release cycle and can't update configs immediately.",
+      "created_at": "2024-11-14T13:10:00Z",
+      "type": "review_comment",
+      "file": "src/config/index.ts",
+      "line": 42
+    },
+    {
+      "author": "dev-rodrigo",
+      "body": "Fair point. I can add a compatibility layer that reads the old config shape and emits a deprecation warning. Would that unblock teams?",
+      "created_at": "2024-11-14T14:05:00Z",
+      "type": "review_comment",
+      "file": "src/config/index.ts",
+      "line": 42
+    },
+    {
+      "author": "dev-priya",
+      "body": "Yes, a deprecation shim would work for me. Let's also make sure the migration path is documented in the breaking change notes.",
+      "created_at": "2024-11-14T14:22:00Z",
+      "type": "review_comment",
+      "file": "src/config/index.ts",
+      "line": 42
+    },
+    {
+      "author": "dev-marcus",
+      "body": "What's the performance overhead of wrapping every DB query in a span? Have you benchmarked this? Concerned about latency regression on high-throughput query paths.",
+      "created_at": "2024-11-14T15:30:00Z",
+      "type": "review_comment",
+      "file": "src/db/query-runner.ts",
+      "line": 88
+    },
+    {
+      "author": "dev-rodrigo",
+      "body": "I ran a quick benchmark locally — overhead was ~0.3ms per query at p99. But that was on my machine with the OTLP exporter disabled. Need to test with a real collector in the loop.",
+      "created_at": "2024-11-14T16:00:00Z",
+      "type": "review_comment",
+      "file": "src/db/query-runner.ts",
+      "line": 88
+    },
+    {
+      "author": "dev-marcus",
+      "body": "We should have CI benchmark results before merging something that touches every query. Can you add a benchmark job to the pipeline?",
+      "created_at": "2024-11-14T16:18:00Z",
+      "type": "review_comment",
+      "file": "src/db/query-runner.ts",
+      "line": 88
+    },
+    {
+      "author": "dev-yuki",
+      "body": "Removing X-Request-ID propagation in http/client.ts is a breaking change for any consumers parsing that header on the receiving end. Should we keep it for a deprecation window?",
+      "created_at": "2024-11-15T09:45:00Z",
+      "type": "review_comment",
+      "file": "src/http/client.ts",
+      "line": 57
+    },
+    {
+      "author": "dev-rodrigo",
+      "body": "Good catch. I'll restore X-Request-ID propagation alongside traceparent for now and open a separate issue to deprecate it properly.",
+      "created_at": "2024-11-15T10:30:00Z",
+      "type": "review_comment",
+      "file": "src/http/client.ts",
+      "line": 57
+    },
+    {
+      "author": "dev-priya",
+      "body": "Overall direction is great. The OTel SDK choice is solid. Main blockers for me: (1) config compat shim, (2) X-Request-ID restored. Happy to re-review once those are addressed.",
+      "created_at": "2024-11-15T14:00:00Z",
+      "type": "pr_comment"
+    },
+    {
+      "author": "dev-marcus",
+      "body": "Same from me — need CI benchmarks before I can approve. The change is architecturally sound but I want data on the query overhead before we land this.",
+      "created_at": "2024-11-15T16:45:00Z",
+      "type": "pr_comment"
+    }
+  ],
+  "reviews": [
+    {
+      "author": "dev-priya",
+      "state": "changes_requested",
+      "submitted_at": "2024-11-14T14:30:00Z",
+      "body": "Needs config compat shim and migration docs before merge."
+    },
+    {
+      "author": "dev-marcus",
+      "state": "changes_requested",
+      "submitted_at": "2024-11-14T16:20:00Z",
+      "body": "Benchmark data required for db/query-runner changes."
+    },
+    {
+      "author": "dev-yuki",
+      "state": "commented",
+      "submitted_at": "2024-11-15T09:50:00Z",
+      "body": "X-Request-ID removal needs a deprecation window."
+    }
+  ],
+  "ci": {
+    "status": "passed",
+    "checks": [
+      { "name": "unit-tests", "status": "passed" },
+      { "name": "lint", "status": "passed" },
+      { "name": "type-check", "status": "passed" },
+      { "name": "integration-tests", "status": "passed" },
+      { "name": "benchmarks", "status": "skipped" }
+    ]
+  },
+  "expected_panel_outcome": "needs_discussion",
+  "expected_recommendation_highlights": [
+    "Architectural direction is sound and OTel SDK choice is appropriate",
+    "Three concrete blockers identified by reviewers must be resolved before merge",
+    "Config breaking change requires a compatibility shim and migration documentation",
+    "X-Request-ID removal should be restored with a deprecation path",
+    "CI benchmark job needed to validate DB query overhead before landing",
+    "Author has acknowledged all concerns and proposed resolutions — needs follow-through"
+  ]
+}
