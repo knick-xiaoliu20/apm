@@ -1,138 +1,121 @@
-## APM Review Panel: `needs_rework`
+# PR Review: Centralize configuration loading with `ConfigLoader` service
 
-> Refactor direction is sound, but two correctness regressions (path traversal, Windows encoding) need to land before this can ship.
-
-cc @danielmeppiel @microsoft/apm-maintainers -- a fresh advisory pass is ready for your review.
-
-The architectural intent -- separating dependency resolution from download orchestration -- is the right call (Python Architect previously flagged the conflation as tech debt). However, this round introduces three regressions worth flagging before the next push:
-
-The path-traversal slip at line 156 is the most important. `dep.name` is user-controlled via apm.yml, and the codebase has a strict invariant (path_security.instructions.md) that any path construction from user input MUST go through `validate_path_segments` + `ensure_path_within`. This is not a style nit -- it's the exact attack surface the centralized helpers exist to prevent.
-
-The Windows-encoding regression is mechanically easy to fix (one character) but signals that the encoding rule is not yet automated in CI. Worth a follow-up to lint for non-ASCII bytes in source files.
-
-The circular import is a real correctness risk Python tolerates only by accident; defer-import or extract-to-third-module both work.
-
-Everything else (validate_url duplication, error-message helpfulness, doc drift, request timeout) is recommended-severity and can land in this PR or a follow-up.
-
-**Dissent.** Python Architect and Supply Chain Security weighted the circular import as recommended vs blocking respectively; CEO sided with recommended because Python's partial-module tolerance has been stable for a decade and the import path is exercised by every install run.
-
-**Aligned with:** Secure by default
-
-### Panel summary
-
-| Persona | B | R | N | Takeaway |
-|---|---|---|---|---|
-| Python Architect | 1 | 1 | 0 | Refactor splits a clean module into a circular import; same logic now lives in two places. |
-| CLI Logging Expert | 1 | 1 | 0 | Two new error strings ship outside STATUS_SYMBOLS; one new emoji slipped in. |
-| DevX UX Expert | 0 | 1 | 0 | New error message is technically accurate but unhelpful to a user encountering it cold. |
-| Supply Chain Security | 1 | 1 | 0 | Path-traversal regression: new code joins user-controlled segments without validate_path_segments. |
-| OSS Growth Hacker | 0 | 0 | 0 | No README/CHANGELOG impact; nothing to amplify or warn about externally. |
-| Doc Writer | 0 | 1 | 0 | Drift: behavior change but docs/src/content/docs/reference/dependencies.md still describes the pre-refactor flow. |
-| Test Coverage | 1 | 1 | 0 | Path-traversal regression has no regression-trap test; the malicious-name case is the test that would have caught this slip. |
-
-> B = blocking-severity findings, R = recommended, N = nits.
-> Counts are signal strength, not gates. The maintainer ships.
-
-### Top 5 follow-ups
-
-1. **[Supply Chain Security] *(blocking-severity)*** Add validate_path_segments + ensure_path_within around the dep.name join at resolver.py:156 -- User-controlled path component without traversal validation; the codebase has a hard rule.
-2. **[Test Coverage] *(blocking-severity)*** Add a regression-trap test exercising malicious dep.name (path-traversal payloads) against the resolver join -- The path-traversal slip is exactly the surface a regression-trap test would have caught; lock the contract in so this never re-ships.
-3. **[CLI Logging Expert] *(blocking-severity)*** Replace the rocket emoji at resolver.py:211 with `[!]` per STATUS_SYMBOLS -- Will crash on Windows cp1252 terminals.
-4. **[Python Architect]** Break the resolver.py <-> downloader.py circular import (factory module or deferred import) -- Tolerated by Python today but fragile to any change in import order.
-5. **[Doc Writer]** Update docs/reference/dependencies.md to name the new Resolver -- Docs still describe the pre-refactor flow; drift will mislead first-time readers.
-
-### Architecture
-
-```mermaid
-classDiagram
-    class Resolver:::touched {
-        +create_resolver()
-        +validate_url(u) bool
-    }
-    class GithubDownloader:::touched {
-        +download(url) Path
-        +validate_url(u) bool
-    }
-    Resolver ..> GithubDownloader : top-level import
-    GithubDownloader ..> Resolver : top-level import (cycle)
-    classDef touched fill:#fef3c7,stroke:#d97706
-```
-
-```mermaid
-flowchart TD
-    A[install pipeline] --> B[resolver.create_resolver]
-    B --> C[downloader.GithubDownloader]
-    C -->|imports at module top| B
-    B -->|imports at module top| C
-```
-
-### Recommendation
-
-Address the two blocking-severity items (path-traversal validation and Windows-encoding fix) before re-requesting review. The circular import is fragile but does not gate; resolve it in this PR if convenient, otherwise track as a follow-up. The remaining recommended items can land in this PR or in a series of small follow-ups -- maintainer's call.
+**PR #2041** · `feat/config-loader` → `main`
 
 ---
 
-<details>
-<summary>Full per-persona findings</summary>
+## Summary
 
-#### Python Architect
+Introduces a `ConfigLoader` singleton that consolidates all environment-variable parsing, validation, and default-value injection into one place. Previously each service module called `process.env` directly, leading to scattered validation logic and silent failures when required variables were absent.
 
-- **[blocking]** Circular import between resolver.py and downloader.py at `src/apm_cli/deps/resolver.py:12`
-  The new factory in resolver.py imports downloader.GithubDownloader at module top, while downloader.py imports resolver.create_resolver at module top. This works only because Python silently tolerates partial modules in sys.modules; the first import that fails will cascade across the whole install path.
-  *Suggested:* Move the factory to a third module (deps/factory.py) that both depend on, or defer the import inside the function body.
-- **[recommended]** validate_url duplicated across resolver.py and downloader.py at `src/apm_cli/deps/resolver.py:88`
-  Two copies that already disagree on trailing-slash handling. R3 EXTRACT trigger fired (>=3 call sites in the diff).
+---
 
-#### CLI Logging Expert
+## Changed Files
 
-- **[blocking]** Emoji character in error message will crash on Windows cp1252 terminals at `src/apm_cli/deps/resolver.py:211`
-  encoding.instructions.md is unambiguous: ASCII-only U+0020-U+007E. The rocket character on line 211 will raise UnicodeEncodeError under charmap.
-  *Suggested:* Replace with `[!]` or `[*]` per STATUS_SYMBOLS.
-- **[recommended]** New error path bypasses _rich_error helper at `src/apm_cli/deps/resolver.py:203`
-  Direct print() loses the panel's colorization and TTY-detection. Inconsistent with the other 38 call sites in this module.
+### `src/config/loader.ts` _(new)_
 
-#### DevX UX Expert
+```typescript
+import { z } from 'zod';
 
-- **[recommended]** Error message lacks an actionable next step at `src/apm_cli/deps/resolver.py:211`
-  'Invalid dependency reference' tells the user WHAT failed but not WHY or what to do. Compare to the message in install/pipeline.py:147 which suggests three remediations.
-  *Suggested:* Suffix with 'Run `apm install --verbose` to see the resolved URL, or check `apm.yml` for typos.'
+const ConfigSchema = z.object({
+  DATABASE_URL: z.string().url(),
+  REDIS_URL: z.string().url().optional(),
+  PORT: z.coerce.number().int().min(1).max(65535).default(3000),
+  LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
+  JWT_SECRET: z.string().min(32),
+  FEATURE_NEW_DASHBOARD: z.coerce.boolean().default(false),
+});
 
-#### Supply Chain Security
+export type AppConfig = z.infer<typeof ConfigSchema>;
 
-- **[blocking]** User-controlled `dep.name` is path-joined without traversal validation at `src/apm_cli/deps/resolver.py:156`
-  path_security.instructions.md mandates validate_path_segments() at parse time for any user-provided value used in path construction. The new code at line 156 calls Path(install_dir) / dep.name directly. A malicious manifest with `name: ../../../etc/passwd` would traverse out of the install dir.
-  *Suggested:* Wrap with `validate_path_segments(dep.name, context='dep.name')` before the join, then `ensure_path_within(result, install_dir)` after.
-- **[recommended]** New URL probe uses raw requests.get without timeout at `src/apm_cli/deps/resolver.py:178`
-  Default no-timeout means a hostile or hung server can stall the install pipeline indefinitely.
-  *Suggested:* Add timeout=30 (matches the convention in github_downloader.py:412).
+let _config: AppConfig | null = null;
 
-#### OSS Growth Hacker
+export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
+  if (_config) return _config;
+  const result = ConfigSchema.safeParse(env);
+  if (!result.success) {
+    const issues = result.error.issues
+      .map(i => `  • ${i.path.join('.')}: ${i.message}`)
+      .join('\n');
+    throw new Error(`Invalid configuration:\n${issues}`);
+  }
+  _config = result.data;
+  return _config;
+}
 
-No findings.
+export function resetConfig(): void {
+  _config = null;
+}
+```
 
-#### Auth Expert -- inactive
+### `src/config/index.ts` _(new)_
 
-PR touches only deps/resolver.py and deps/downloader.py refactor; no AuthResolver, HostInfo, or token-handling code in scope.
+```typescript
+export { loadConfig, resetConfig } from './loader';
+export type { AppConfig } from './loader';
+```
 
-#### Doc Writer
+### `src/db/client.ts` _(modified)_
 
-- **[recommended]** docs/reference/dependencies.md describes pre-refactor flow at `docs/src/content/docs/reference/dependencies.md:47`
-  The doc says 'resolution is performed by GithubDownloader directly' but the refactor introduces a separate Resolver. Documentation drift will mislead first-time readers.
-  *Suggested:* Update the resolution-flow section to name the new Resolver, or add a note that downloader-direct resolution is being phased out.
+```diff
+- const dbUrl = process.env.DATABASE_URL;
+- if (!dbUrl) throw new Error('DATABASE_URL is not set');
++ import { loadConfig } from '../config';
++ const { DATABASE_URL: dbUrl } = loadConfig();
+```
 
-#### Test Coverage
+### `src/cache/redis.ts` _(modified)_
 
-- **[blocking]** No test exercises a malicious dep.name (path-traversal payload) against the new resolver join at `tests/unit/deps/test_resolver.py`
-  The path-traversal regression at resolver.py:156 is exactly the surface that validate_path_segments + ensure_path_within exist to defend. A test that constructs a Dep with `name='../../../etc/passwd'` and asserts the resolver raises before joining is the regression-trap that prevents this from re-shipping. Absence of such a test in tests/unit/deps/ confirmed by `grep -rn 'validate_path_segments\|path_traversal' tests/unit/deps/` returning no match.
-  *Suggested:* Add a parametrized test with traversal payloads ('../', '..\\', '/etc/passwd', '..%2f..') and assert each raises ValueError before any filesystem operation.
-  *Proof (test MISSING at):* `tests/unit/deps/test_resolver.py::test_resolver_rejects_path_traversal_in_dep_name` -- proves: User-controlled dep.name cannot escape the install directory via traversal payloads. [secure-by-default,governed-by-policy]
-  `with pytest.raises(ValueError): resolver.resolve(Dep(name='../../../etc/passwd', source='gh:...'))`
-- **[recommended]** Refactor changes resolver/downloader integration but no integration test covers the cross-module flow at `tests/integration/test_install_pipeline.py`
-  Existing tests cover resolver.py and downloader.py in isolation; no test exercises the full install path end-to-end through both modules. A refactor that splits responsibilities across a module boundary needs at least one integration test that proves the boundary works.
-  *Suggested:* Add an integration test that installs a real (test-fixture) dependency and asserts the file ends up in the expected location after going through both Resolver and Downloader.
-  *Proof (test MISSING at):* `tests/integration/test_install_pipeline.py::test_install_pipeline_resolver_to_downloader_e2e` -- proves: The new Resolver -> Downloader boundary actually delivers files to disk for a real apm.yml. [portability-by-manifest,devx]
-  `result = install(manifest_path, scope=USER); assert (target_dir / 'expected.md').exists()`
+```diff
+- const redisUrl = process.env.REDIS_URL ?? 'redis://localhost:6379';
++ import { loadConfig } from '../config';
++ const { REDIS_URL: redisUrl = 'redis://localhost:6379' } = loadConfig();
+```
 
-</details>
+### `src/config/loader.test.ts` _(new)_
 
-<sub>This panel is advisory. It does not block merge. Re-apply the `panel-review` label after addressing feedback to re-run.</sub>
+```typescript
+import { loadConfig, resetConfig } from './loader';
+
+beforeEach(() => resetConfig());
+
+test('parses valid environment', () => {
+  const cfg = loadConfig({
+    DATABASE_URL: 'postgresql://localhost/test',
+    JWT_SECRET: 'a'.repeat(32),
+  });
+  expect(cfg.PORT).toBe(3000);
+  expect(cfg.LOG_LEVEL).toBe('info');
+});
+
+test('throws on missing required vars', () => {
+  expect(() => loadConfig({})).toThrow('Invalid configuration');
+});
+
+test('returns cached instance on second call', () => {
+  const env = { DATABASE_URL: 'postgresql://localhost/test', JWT_SECRET: 'a'.repeat(32) };
+  const a = loadConfig(env);
+  const b = loadConfig({});
+  expect(a).toBe(b);
+});
+```
+
+---
+
+## Concerns Raised During Review
+
+1. **Singleton reset in production** — `resetConfig()` is exported publicly. If called accidentally in production code (not just tests), the next `loadConfig()` call re-parses `process.env`, which is fine, but the export surface is wider than necessary. Consider exporting it only from a test-utilities barrel.
+
+2. **No support for `.env` files** — The loader reads only `process.env`. Projects that rely on `dotenv` must ensure it is loaded before `loadConfig()` is called. This ordering constraint is undocumented.
+
+3. **`REDIS_URL` default duplication** — The schema marks `REDIS_URL` as optional, but `redis.ts` re-specifies a default (`redis://localhost:6379`). The source of truth for defaults should be the schema alone.
+
+4. **Missing integration test** — Unit tests cover the loader in isolation, but there is no test confirming that `db/client.ts` and `cache/redis.ts` actually consume the centralised config rather than falling back to direct `process.env` access.
+
+5. **Coercion of `FEATURE_NEW_DASHBOARD`** — `z.coerce.boolean()` converts the string `'false'` to `true` because any non-empty string is truthy after coercion. A custom refinement or `z.preprocess` is needed for correct boolean flag parsing from env strings.
+
+---
+
+## Verdict
+
+**Needs Rework** — The direction is correct and the centralisation is valuable, but items 3 and 5 are bugs that must be fixed before merge. Items 1, 2, and 4 should be addressed or explicitly deferred with a tracking issue.
