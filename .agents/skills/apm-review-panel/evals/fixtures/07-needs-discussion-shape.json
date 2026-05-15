@@ -1,0 +1,121 @@
+{
+  "pr": {
+    "number": 2301,
+    "title": "Add circuit breaker pattern to external service clients",
+    "author": "dev-hayden",
+    "base_branch": "main",
+    "head_branch": "feat/circuit-breaker",
+    "description": "Implements a generic CircuitBreaker class that wraps external HTTP calls. Supports closed, open, and half-open states with configurable failure thresholds and recovery timeouts. Used by PaymentClient and NotificationClient.",
+    "files_changed": 6,
+    "additions": 214,
+    "deletions": 38,
+    "commits": 4,
+    "labels": ["enhancement", "reliability"],
+    "reviewers_requested": ["arch-team"]
+  },
+  "diff_summary": [
+    {
+      "file": "src/resilience/circuit_breaker.py",
+      "change_type": "added",
+      "additions": 128,
+      "deletions": 0,
+      "summary": "New CircuitBreaker class with state machine logic, configurable thresholds, and half-open probe support."
+    },
+    {
+      "file": "src/clients/payment_client.py",
+      "change_type": "modified",
+      "additions": 22,
+      "deletions": 18,
+      "summary": "Wraps HTTP calls with CircuitBreaker instance; removes manual retry loop."
+    },
+    {
+      "file": "src/clients/notification_client.py",
+      "change_type": "modified",
+      "additions": 19,
+      "deletions": 14,
+      "summary": "Same circuit breaker integration as payment_client."
+    },
+    {
+      "file": "tests/resilience/test_circuit_breaker.py",
+      "change_type": "added",
+      "additions": 87,
+      "deletions": 0,
+      "summary": "Unit tests covering state transitions, threshold enforcement, and half-open recovery."
+    },
+    {
+      "file": "tests/clients/test_payment_client.py",
+      "change_type": "modified",
+      "additions": 14,
+      "deletions": 6,
+      "summary": "Updates mocks to account for circuit breaker wrapping."
+    },
+    {
+      "file": "docs/resilience.md",
+      "change_type": "added",
+      "additions": 44,
+      "deletions": 0,
+      "summary": "Documents CircuitBreaker usage, configuration options, and operational guidance."
+    }
+  ],
+  "panel_context": {
+    "repo": "acme-corp/platform-services",
+    "team_size": "medium",
+    "release_cycle": "bi-weekly",
+    "risk_profile": "high",
+    "prior_incidents": [
+      "2024-11: Payment service cascade failure due to downstream timeout storm"
+    ]
+  },
+  "panelist_verdicts": [
+    {
+      "panelist": "security",
+      "verdict": "needs_discussion",
+      "confidence": 0.72,
+      "summary": "The half-open state allows a single probe request through to a potentially degraded service. If that probe carries sensitive payment data, there is a window where PII is sent to an unstable endpoint. Recommend discussing whether probe requests should be synthetic/health-check calls rather than real user requests.",
+      "flags": [
+        {
+          "severity": "medium",
+          "location": "src/resilience/circuit_breaker.py:94",
+          "note": "Probe request in half-open state uses the actual caller's payload. Consider a dedicated health probe instead."
+        }
+      ]
+    },
+    {
+      "panelist": "performance",
+      "verdict": "ship_now",
+      "confidence": 0.85,
+      "summary": "Circuit breaker will prevent the thread-pool exhaustion pattern seen in the November incident. State transitions are O(1) and the lock strategy (threading.Lock) is appropriate for the current single-process deployment.",
+      "flags": []
+    },
+    {
+      "panelist": "maintainability",
+      "verdict": "needs_discussion",
+      "confidence": 0.68,
+      "summary": "The CircuitBreaker is not currently observable — there is no metric emission or structured log on state transitions. Ops will have no visibility into open/half-open states in production. This should be resolved before rollout, but the design itself is clean.",
+      "flags": [
+        {
+          "severity": "medium",
+          "location": "src/resilience/circuit_breaker.py",
+          "note": "No metrics or structured logging on state change events (closed→open, open→half-open, half-open→closed)."
+        }
+      ]
+    },
+    {
+      "panelist": "correctness",
+      "verdict": "needs_discussion",
+      "confidence": 0.74,
+      "summary": "Failure counting resets on any successful call in half-open state, but the threshold for 'recovery' is a single success. For flaky services this may cause premature circuit closure. The team should decide on the recovery policy before this ships to production.",
+      "flags": [
+        {
+          "severity": "medium",
+          "location": "src/resilience/circuit_breaker.py:108",
+          "note": "Single success in half-open closes the circuit. Consider requiring N consecutive successes for more robust recovery."
+        }
+      ]
+    }
+  ],
+  "expected_ceo_verdict": "needs_discussion",
+  "expected_ceo_confidence_min": 0.65,
+  "expected_ceo_confidence_max": 0.82,
+  "notes": "Three of four panelists flag discussion items; no hard blockers but the security probe concern and observability gap are significant enough that the team should align before merge. Performance panelist is satisfied. Fixture tests the CEO's ability to synthesise a majority needs_discussion signal with one ship_now outlier."
+}
