@@ -1,0 +1,97 @@
+{
+  "pr": {
+    "number": 2371,
+    "title": "Introduce distributed transaction coordinator with two-phase commit",
+    "author": "priya-nkosi",
+    "base_branch": "main",
+    "head_branch": "feat/distributed-txn-coordinator",
+    "description": "Adds a `TransactionCoordinator` that orchestrates two-phase commit (2PC) across multiple resource managers. This is needed to support the upcoming cross-shard write path for the new billing engine.\n\nThe coordinator tracks participant state in Redis, handles prepare/commit/abort phases, and exposes a context-manager API for callers.\n\nThis is a large change and I'm aware there are open questions around failure-recovery semantics — leaving those as TODOs for now and hoping the panel can weigh in.",
+    "labels": ["architecture", "distributed-systems", "needs-discussion"],
+    "draft": false,
+    "created_at": "2024-11-03T09:14:22Z",
+    "updated_at": "2024-11-04T16:45:10Z"
+  },
+  "diff_summary": {
+    "files_changed": 18,
+    "insertions": 1042,
+    "deletions": 87,
+    "touched_paths": [
+      "src/txn/coordinator.py",
+      "src/txn/participant.py",
+      "src/txn/log.py",
+      "src/txn/exceptions.py",
+      "src/txn/__init__.py",
+      "src/storage/shard_writer.py",
+      "src/billing/write_path.py",
+      "tests/txn/test_coordinator.py",
+      "tests/txn/test_participant.py",
+      "tests/txn/test_recovery.py",
+      "docs/architecture/distributed-transactions.md"
+    ]
+  },
+  "panelist_inputs": [
+    {
+      "role": "security",
+      "concerns": [
+        "Redis is used as the coordinator log — if Redis is compromised or unavailable mid-transaction, partial commits may silently corrupt billing state.",
+        "No mention of encryption or access control on the coordinator log keys.",
+        "The `abort` path does not appear to emit an audit event, breaking the billing audit trail."
+      ],
+      "praise": [
+        "Good use of UUIDs for transaction IDs — avoids enumeration."
+      ],
+      "vote": "block"
+    },
+    {
+      "role": "performance",
+      "concerns": [
+        "Two-phase commit adds at least two round-trips per write; at projected billing volume this could add 40-80 ms p99 latency on the write path.",
+        "The coordinator holds a Redis lock for the full duration of the prepare phase — this could serialize writes under contention.",
+        "No benchmarks or load-test results included."
+      ],
+      "praise": [
+        "Async participant notifications are a good call — avoids blocking the coordinator thread."
+      ],
+      "vote": "needs-discussion"
+    },
+    {
+      "role": "reliability",
+      "concerns": [
+        "The TODOs around failure-recovery semantics are load-bearing: if the coordinator crashes after prepare but before commit, there is no documented recovery path.",
+        "No dead-letter or timeout handling for participants that never respond to prepare.",
+        "Tests for the recovery module are present but all marked `@pytest.mark.skip` with no explanation."
+      ],
+      "praise": [
+        "Transaction log structure is well-designed and should support replay-based recovery once implemented."
+      ],
+      "vote": "block"
+    },
+    {
+      "role": "maintainability",
+      "concerns": [
+        "The coordinator and participant are tightly coupled through a shared Redis schema with no versioning strategy.",
+        "Several magic timeout constants are inlined; these should be config-driven.",
+        "The architecture doc is a good start but doesn't cover the failure modes discussed in concerns above."
+      ],
+      "praise": [
+        "Clean separation of coordinator/participant roles.",
+        "Context-manager API is ergonomic and will be easy for callers to adopt."
+      ],
+      "vote": "needs-rework"
+    }
+  ],
+  "expected_outcome": {
+    "recommendation": "escalate",
+    "confidence": "high",
+    "rationale_keywords": [
+      "two-phase commit",
+      "failure recovery",
+      "billing integrity",
+      "architecture review",
+      "unresolved TODOs",
+      "security concerns",
+      "performance impact"
+    ],
+    "blocking_panelists": ["security", "reliability"]
+  }
+}
