@@ -1,0 +1,159 @@
+{
+  "pr": {
+    "number": 2341,
+    "title": "Add rate limiting middleware to API gateway",
+    "author": "dev-jane",
+    "base_branch": "main",
+    "head_branch": "feature/rate-limiting",
+    "description": "Implements token bucket rate limiting for all public API endpoints. Adds per-user and per-IP limits configurable via environment variables. Includes Redis-backed distributed counter support.",
+    "files_changed": 9,
+    "lines_added": 312,
+    "lines_removed": 47,
+    "labels": ["enhancement", "api", "security"],
+    "linked_issues": ["#2289", "#2301"]
+  },
+  "diff_summary": [
+    {
+      "file": "gateway/middleware/rate_limit.py",
+      "status": "added",
+      "lines_added": 148,
+      "lines_removed": 0,
+      "summary": "New RateLimiter class implementing token bucket algorithm with Redis backend"
+    },
+    {
+      "file": "gateway/middleware/__init__.py",
+      "status": "modified",
+      "lines_added": 3,
+      "lines_removed": 1,
+      "summary": "Export RateLimiter from middleware package"
+    },
+    {
+      "file": "gateway/app.py",
+      "status": "modified",
+      "lines_added": 18,
+      "lines_removed": 4,
+      "summary": "Wire rate limiting middleware into request pipeline"
+    },
+    {
+      "file": "gateway/config.py",
+      "status": "modified",
+      "lines_added": 22,
+      "lines_removed": 8,
+      "summary": "Add RATE_LIMIT_* env var configuration with defaults"
+    },
+    {
+      "file": "gateway/middleware/rate_limit_redis.py",
+      "status": "added",
+      "lines_added": 89,
+      "lines_removed": 0,
+      "summary": "Redis-backed distributed counter for rate limiting across multiple gateway instances"
+    },
+    {
+      "file": "tests/middleware/test_rate_limit.py",
+      "status": "added",
+      "lines_added": 97,
+      "lines_removed": 0,
+      "summary": "Unit tests for token bucket logic and Redis backend"
+    },
+    {
+      "file": "tests/middleware/test_rate_limit_integration.py",
+      "status": "added",
+      "lines_added": 61,
+      "lines_removed": 0,
+      "summary": "Integration tests using a real Redis instance via pytest fixture"
+    },
+    {
+      "file": "docs/rate-limiting.md",
+      "status": "added",
+      "lines_added": 54,
+      "lines_removed": 0,
+      "summary": "Operator documentation for configuring and monitoring rate limits"
+    },
+    {
+      "file": "requirements.txt",
+      "status": "modified",
+      "lines_added": 2,
+      "lines_removed": 0,
+      "summary": "Add redis and limits packages"
+    }
+  ],
+  "panelist_reviews": [
+    {
+      "panelist": "security-reviewer",
+      "verdict": "request-changes",
+      "confidence": 0.87,
+      "summary": "Rate limiting logic is sound but the Redis key schema leaks PII (raw user IDs in plaintext keys) and there is no fallback behavior when Redis is unavailable — the middleware currently raises an unhandled exception that would take down the gateway.",
+      "concerns": [
+        {
+          "severity": "high",
+          "category": "security",
+          "description": "Redis keys are constructed as `rate:{user_id}:{endpoint}`. If user_id is an email address or internal UUID tied to PII, this violates data minimization principles. Keys should use a one-way hash."
+        },
+        {
+          "severity": "high",
+          "category": "reliability",
+          "description": "RateLimiterRedis.increment() does not catch redis.exceptions.ConnectionError. A Redis outage will propagate a 500 to all API callers. The fallback should either allow traffic (fail-open) or use the in-memory bucket."
+        },
+        {
+          "severity": "medium",
+          "category": "correctness",
+          "description": "Token bucket refill calculation uses time.time() which is not monotonic. Clock skew on the host or NTP adjustments could cause negative token grants. Use time.monotonic() for elapsed time calculations."
+        }
+      ],
+      "praise": "Good test coverage including integration tests. The config defaults are sensible and well-documented."
+    },
+    {
+      "panelist": "backend-reviewer",
+      "verdict": "request-changes",
+      "confidence": 0.79,
+      "summary": "The Redis Lua script for atomic increment is correct, but the middleware is applied globally before authentication, meaning unauthenticated requests consume the per-user quota anonymously under the IP bucket, which may be unintentional. Also missing: rate limit headers in the response.",
+      "concerns": [
+        {
+          "severity": "medium",
+          "category": "design",
+          "description": "Middleware is registered before the auth middleware in app.py. Authenticated and unauthenticated requests should likely have separate quota pools. Consider reordering or adding a flag to skip per-user limiting when no identity is resolved."
+        },
+        {
+          "severity": "medium",
+          "category": "api-contract",
+          "description": "RFC 6585 and common practice require returning X-RateLimit-Limit, X-RateLimit-Remaining, and X-RateLimit-Reset headers. These are absent from the response, making it impossible for clients to implement backoff."
+        },
+        {
+          "severity": "low",
+          "category": "observability",
+          "description": "No metrics emitted when a request is throttled. A counter like `gateway.rate_limit.rejected{endpoint, reason}` would help with alerting."
+        }
+      ],
+      "praise": "Lua atomic increment avoids race conditions cleanly. The token bucket parameters being per-endpoint via config is a nice touch."
+    },
+    {
+      "panelist": "dx-reviewer",
+      "verdict": "approve-with-suggestions",
+      "confidence": 0.72,
+      "summary": "Documentation is clear and the feature is well-scoped. The security and reliability concerns raised by other panelists should be addressed before merge, but the overall approach is correct.",
+      "concerns": [
+        {
+          "severity": "low",
+          "category": "documentation",
+          "description": "docs/rate-limiting.md does not document the 429 response body schema. Consumers need to know the shape of the error payload to display useful messages."
+        }
+      ],
+      "praise": "Excellent linked issue references and a well-written PR description. The operator docs cover the most common tuning scenarios."
+    }
+  ],
+  "ceo_verdict": {
+    "recommendation": "request-changes",
+    "confidence": 0.85,
+    "rationale": "Two high-severity issues (PII in Redis keys, unhandled Redis failure) must be resolved before merge. The missing rate-limit response headers are a breaking omission for client compatibility. Changes are well-scoped and tests exist; a focused revision pass should be quick.",
+    "blocking_issues": [
+      "Hash user identifiers before using them as Redis key components",
+      "Add fail-open (or in-memory fallback) when Redis is unreachable",
+      "Emit X-RateLimit-* response headers on every request"
+    ],
+    "non_blocking_suggestions": [
+      "Switch elapsed-time calculation to time.monotonic()",
+      "Clarify middleware ordering relative to auth in docs",
+      "Add throttle rejection metric"
+    ]
+  }
+}
