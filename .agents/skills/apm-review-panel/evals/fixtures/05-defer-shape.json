@@ -1,0 +1,145 @@
+{
+  "pr": {
+    "number": 2341,
+    "title": "feat: add async event streaming pipeline with backpressure support",
+    "author": "priya-k",
+    "base_branch": "main",
+    "head_branch": "feat/async-event-streaming",
+    "description": "Introduces a new async event streaming pipeline that supports backpressure, fan-out delivery, and configurable buffering strategies. This is a foundational piece for the upcoming real-time analytics feature. The implementation uses asyncio queues internally and exposes a clean publisher/subscriber API.\n\nThis PR is intentionally scoped to the core pipeline mechanics only — serialization formats, persistence, and the HTTP SSE layer will follow in subsequent PRs.",
+    "labels": ["enhancement", "async", "infrastructure", "needs-follow-up"],
+    "draft": false,
+    "created_at": "2024-11-14T09:22:00Z",
+    "updated_at": "2024-11-15T16:45:00Z"
+  },
+  "diff_summary": {
+    "files_changed": 9,
+    "additions": 412,
+    "deletions": 18,
+    "files": [
+      {
+        "path": "apm/streaming/__init__.py",
+        "additions": 4,
+        "deletions": 0,
+        "change_type": "added"
+      },
+      {
+        "path": "apm/streaming/pipeline.py",
+        "additions": 187,
+        "deletions": 0,
+        "change_type": "added"
+      },
+      {
+        "path": "apm/streaming/subscriber.py",
+        "additions": 94,
+        "deletions": 0,
+        "change_type": "added"
+      },
+      {
+        "path": "apm/streaming/backpressure.py",
+        "additions": 61,
+        "deletions": 0,
+        "change_type": "added"
+      },
+      {
+        "path": "apm/streaming/exceptions.py",
+        "additions": 22,
+        "deletions": 0,
+        "change_type": "added"
+      },
+      {
+        "path": "tests/streaming/test_pipeline.py",
+        "additions": 98,
+        "deletions": 0,
+        "change_type": "added"
+      },
+      {
+        "path": "tests/streaming/test_backpressure.py",
+        "additions": 44,
+        "deletions": 0,
+        "change_type": "added"
+      },
+      {
+        "path": "docs/streaming.md",
+        "additions": 71,
+        "deletions": 0,
+        "change_type": "added"
+      },
+      {
+        "path": "apm/config/defaults.py",
+        "additions": 8,
+        "deletions": 18,
+        "change_type": "modified"
+      }
+    ]
+  },
+  "code_snippets": [
+    {
+      "file": "apm/streaming/pipeline.py",
+      "language": "python",
+      "excerpt": "class EventPipeline:\n    \"\"\"Async event streaming pipeline with fan-out delivery and backpressure.\n\n    Publishers push events into the pipeline; all active subscribers receive\n    a copy. If a subscriber's internal buffer is full and the backpressure\n    strategy is BLOCK, the publish call will await until space is available.\n    With DROP_OLDEST or DROP_NEWEST the call returns immediately.\n    \"\"\"\n\n    def __init__(\n        self,\n        buffer_size: int = 256,\n        backpressure: BackpressureStrategy = BackpressureStrategy.BLOCK,\n    ) -> None:\n        self._buffer_size = buffer_size\n        self._backpressure = backpressure\n        self._subscribers: dict[str, asyncio.Queue] = {}\n        self._lock = asyncio.Lock()\n        self._closed = False\n\n    async def publish(self, event: dict) -> int:\n        \"\"\"Publish an event to all active subscribers.\n\n        Returns the number of subscribers the event was delivered to.\n        Raises PipelineClosedError if the pipeline has been shut down.\n        \"\"\"\n        if self._closed:\n            raise PipelineClosedError(\"Cannot publish to a closed pipeline\")\n\n        delivered = 0\n        async with self._lock:\n            targets = list(self._subscribers.items())\n\n        for sub_id, queue in targets:\n            try:\n                await self._enqueue(queue, event)\n                delivered += 1\n            except SubscriberDroppedError:\n                pass\n\n        return delivered"
+    },
+    {
+      "file": "apm/streaming/backpressure.py",
+      "language": "python",
+      "excerpt": "class BackpressureStrategy(enum.Enum):\n    BLOCK = \"block\"          # await until queue has space\n    DROP_OLDEST = \"drop_oldest\"  # evict head item, then insert\n    DROP_NEWEST = \"drop_newest\"  # discard the incoming event\n\n\nasync def apply_backpressure(\n    queue: asyncio.Queue,\n    event: dict,\n    strategy: BackpressureStrategy,\n    timeout: float | None = None,\n) -> bool:\n    \"\"\"Apply the chosen backpressure strategy when a queue is full.\n\n    Returns True if the event was enqueued, False if it was dropped.\n    \"\"\"\n    if strategy is BackpressureStrategy.BLOCK:\n        await asyncio.wait_for(queue.put(event), timeout=timeout)\n        return True\n    elif strategy is BackpressureStrategy.DROP_OLDEST:\n        try:\n            queue.get_nowait()  # discard oldest\n        except asyncio.QueueEmpty:\n            pass\n        queue.put_nowait(event)\n        return True\n    elif strategy is BackpressureStrategy.DROP_NEWEST:\n        return False\n    else:\n        raise ValueError(f\"Unknown backpressure strategy: {strategy}\")"
+    }
+  ],
+  "review_comments": [
+    {
+      "author": "wei-chen",
+      "body": "The fan-out loop in `publish` acquires the lock to snapshot subscribers then releases it before iterating. This is intentional to avoid holding the lock during potentially-blocking enqueue operations, right? Worth a comment in the code.",
+      "file": "apm/streaming/pipeline.py",
+      "line": 48,
+      "resolved": false
+    },
+    {
+      "author": "priya-k",
+      "body": "@wei-chen yes exactly — I'll add a comment. The tradeoff is a subscriber added between snapshot and delivery won't get this event, which is acceptable for our use case.",
+      "file": "apm/streaming/pipeline.py",
+      "line": 48,
+      "resolved": false
+    },
+    {
+      "author": "tomasz-w",
+      "body": "I notice there's no concept of event ordering guarantees documented. Downstream PRs (SSE layer, persistence) will probably need to know: is delivery order per-subscriber FIFO? Can two concurrent publishes interleave inside a single subscriber's queue?",
+      "file": "docs/streaming.md",
+      "line": 12,
+      "resolved": false
+    },
+    {
+      "author": "priya-k",
+      "body": "@tomasz-w good catch. Per-subscriber it's FIFO (asyncio.Queue guarantees that), but two concurrent `publish` calls are not serialized relative to each other so yes, interleaving is possible. I'll document this explicitly before the follow-up PRs land.",
+      "file": "docs/streaming.md",
+      "line": 12,
+      "resolved": false
+    },
+    {
+      "author": "ana-r",
+      "body": "The `config/defaults.py` change removes 18 lines — can you summarize what was removed? The diff context doesn't make it obvious whether those were streaming-unrelated dead configs or something that will be missed.",
+      "file": "apm/config/defaults.py",
+      "line": 1,
+      "resolved": true
+    },
+    {
+      "author": "priya-k",
+      "body": "@ana-r those were leftover stubs from the old synchronous event bus that was removed in #2289. Completely safe to delete — I should have called that out in the PR description.",
+      "file": "apm/config/defaults.py",
+      "line": 1,
+      "resolved": true
+    }
+  ],
+  "ci": {
+    "status": "passing",
+    "checks": [
+      { "name": "unit-tests", "status": "passing", "duration_s": 34 },
+      { "name": "lint", "status": "passing", "duration_s": 8 },
+      { "name": "type-check", "status": "passing", "duration_s": 12 },
+      { "name": "integration-tests", "status": "passing", "duration_s": 91 }
+    ]
+  },
+  "metadata": {
+    "expected_verdict": "defer",
+    "rationale": "The implementation is solid and CI is green, but open design questions about ordering guarantees and the undocumented fan-out race window need to be resolved before the follow-up PRs build on this foundation. Merging now risks locking in an interface that downstream work depends on before the semantics are fully specified. Recommend deferring until the ordering docs are added and the snapshot-then-iterate behaviour is commented and explicitly accepted.",
+    "difficulty": "medium"
+  }
+}
